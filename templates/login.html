@@ -4,19 +4,35 @@
 {% block content %}
 <div style="max-width:400px; margin:0 auto;">
     <h1 style="margin-bottom:24px;">Вход в аккаунт</h1>
-    <form method="post">
+    <form action="" method="post">
+        {{ form.hidden_tag() }}
         <div class="form-group">
-            <label>Email</label>
-            <input type="email" name="email" required autofocus>
+            <p>
+            {{ form.email.label }}<br>
+            {{ form.email(class="form-control", type="email") }}<br>
+            {% for error in form.email.errors %}
+                <div class="alert alert-danger" role="alert">
+                    {{ error }}
+                </div>
+            {% endfor %}
+        </p>
         </div>
         <div class="form-group">
-            <label>Пароль</label>
-            <input type="password" name="password" required>
+        <p>
+            {{ form.password.label }}<br>
+            {{ form.password(class="form-control", type="password") }}<br>
+            {% for error in form.password.errors %}
+                <div class="alert alert-danger" role="alert">
+                    {{ error }}
+                </div>
+            {% endfor %}
+        </p>
         </div>
-        <button type="submit" class="btn btn-primary" style="width:100%; padding:10px;">Войти</button>
+        <button { type="submit" class="btn btn-primary" style="width:100%; padding:10px;">{{ form.submit(type="submit", class="btn btn-primary") }}</button>
     </form>
     <p style="margin-top:16px; font-size:0.9rem; text-align:center;">
         Нет аккаунта? <a href="{{ url_for('register') }}">Зарегистрироваться</a>
     </p>
 </div>
 {% endblock %}
+

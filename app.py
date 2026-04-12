@@ -1,9 +1,16 @@
 from flask import Flask, render_template, redirect, url_for, request, session, flash
-
+from flask_login import LoginManager, login_user, logout_user, current_user, login_required
+from datetime import timedelta
+from data import db_session
+from data.users import User
+from form.users import LoginForm, RegistrationForm
 app = Flask(__name__)
 app.secret_key = 'dev-secret-key'
+app.config['SECRET_KEY'] = 'dev-secret-key'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 
-
+login_manager = LoginManager()
+login_manager.init_app(app)
 
 PRODUCTS = []
 
@@ -102,41 +109,61 @@ def checkout():
     return render_template('checkout.html', total=total, cart_count=cart_count())
 
 
+@login_manager.user_loader
+def load_user(user_id):
+    db_sess = db_session.create_session()
+    return db_sess.get(User,user_id)
+
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        email = request.form.get('email', '').strip()
-        password = request.form.get('password', '')
-        user = USERS.get(email)
-        if user and user['password'] == password:
-            session['user'] = email
-            flash('Вы вошли в систему.')
-            return redirect(url_for('index'))
-        flash('Неверный email или пароль.')
-    return render_template('login.html', cart_count=cart_count())
-
+    form = LoginForm()
+    if form.validate_on_submit():
+        db_sess = db_session.create_session()
+        user = db_sess.query(User).filter(User.email == form.email.data).first()
+        if user and user.check_password(form.password.data):
+            login_user(user, remember=form.remember_me.data)
+            return redirect("/")
+        return render_template('login.html',
+                               message="Неправильный логин или пароль",
+                               form=form)
+    return render_template('login.html', form=form,cart_count=cart_count())
+#    if request.method == 'POST':
+#        email = request.form.get('email', '').strip()
+#        password = request.form.get('password', '')
+#        user = USERS.get(email)title='Авторизация', form=form
+#        if user and user['password'] == password:
+#            session['user'] = email
+#            flash('Вы вошли в систему.')
+#            return redirect(url_for('index'))
+#        flash('Неверный email или пароль.')
+#    return render_template('login.html', cart_count=cart_count())
+#
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    if request.method == 'POST':
-        name = request.form.get('name', '').strip()
-        email = request.form.get('email', '').strip()
-        password = request.form.get('password', '')
-        if email in USERS:
-            flash('Email уже зарегистрирован.')
-        elif not name or not email or not password:
-            flash('Заполните все поля.')
-        else:
-            role = request.form.get('role', 'customer')
-            position = request.form.get('position', '')
-            USERS[email] = {'password': password, 'name': name, 'role': role, 'position': position}
-            session['user'] = email
-            flash('Регистрация прошла успешно.')
-            return redirect(url_for('index'))
-    return render_template('register.html', cart_count=cart_count())
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        db_sess = db_session.create_session()
+        if db_sess.query(User).filter(User.email == form.email.data).first():
+            return render_template('register.html', title='Регистрация',
+                                   form=form,
+                                   message="Такой пользователь уже есть")
+        user = User(
+            name=form.name.data,
+            email=form.email.data,
+            role=form.role.data
+        )
+        user.set_password(form.password.data)
+        db_sess.add(user)
+        db_sess.commit()
+        return redirect('/login')
+    return render_template('register.html', title='Регистрация', form=form)
 
 
 @app.route('/logout')
+@login_required
 def logout():
     session.pop('user', None)
     return redirect(url_for('index'))
@@ -156,6 +183,8 @@ def not_found(e):
     return render_template('404.html'), 404
 
 
+
+
 if __name__ == '__main__':
+    db_session.global_init("db/blogs.sqlite")
     app.run(debug=True)
- 
