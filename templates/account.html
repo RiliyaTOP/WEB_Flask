@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}Аккаунт — Магазин{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom:24px;">Личный кабинет</h1>
+
+<div style="display:grid; grid-template-columns:200px 1fr; gap:32px;">
+    <nav style="border:1px solid #000; padding:16px; align-self:start;">
+        <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
+            <li><a href="{{ url_for('account') }}" style="color:#000;">Профиль</a></li>
+            <li><a href="#" style="color:#000;">Мои заказы</a></li>
+            <li><a href="{{ url_for('logout') }}" style="color:#000;">Выйти</a></li>
+        </ul>
+    </nav>
+
+    <div>
+        <h2 style="margin-bottom:16px; font-size:1rem; border-bottom:1px solid #000; padding-bottom:8px;">Профиль</h2>
+        <table style="max-width:400px;">
+            <tr>
+                <td style="padding:8px 16px 8px 0; color:#555;">Имя:</td>
+                <td style="padding:8px 0;">{{ user.get('name', '—') }}</td>
+            </tr>
+            <tr>
+                <td style="padding:8px 16px 8px 0; color:#555;">Email:</td>
+                <td style="padding:8px 0;">{{ email }}</td>
+            </tr>
+            <tr>
+                <td style="padding:8px 16px 8px 0; color:#555;">Тип аккаунта:</td>
+                <td style="padding:8px 0;">
+                    {% if user.get('role') == 'employee' %}Сотрудник{% else %}Покупатель{% endif %}
+                </td>
+            </tr>
+            {% if user.get('role') == 'employee' and user.get('position') %}
+            <tr>
+                <td style="padding:8px 16px 8px 0; color:#555;">Должность:</td>
+                <td style="padding:8px 0;">{{ user.position }}</td>
+            </tr>
+            {% endif %}
+        </table>
+
+        <h2 style="margin:24px 0 16px; font-size:1rem; border-bottom:1px solid #000; padding-bottom:8px;">Мои заказы</h2>
+        <p style="color:#555; font-size:0.9rem;">Заказов пока нет.</p>
+    </div>
+</div>
+{% endblock %}

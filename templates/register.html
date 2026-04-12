@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}Регистрация — Магазин{% endblock %}
+
+{% block content %}
+<div style="max-width:440px; margin:0 auto;">
+    <h1 style="margin-bottom:24px;">Регистрация</h1>
+
+    <!-- Переключатель типа аккаунта -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; border:1px solid #000; margin-bottom:24px;">
+        <button type="button" id="tab-customer" onclick="switchRole('customer')"
+            style="padding:10px; border:none; cursor:pointer; background:#000; color:#fff; font-size:0.9rem;">
+            Покупатель
+        </button>
+        <button type="button" id="tab-employee" onclick="switchRole('employee')"
+            style="padding:10px; border:none; border-left:1px solid #000; cursor:pointer; background:#fff; color:#000; font-size:0.9rem;">
+            Сотрудник
+        </button>
+    </div>
+
+    <form method="post">
+        <input type="hidden" name="role" id="role-input" value="customer">
+
+        <div class="form-group">
+            <label>Имя</label>
+            <input type="text" name="name" required autofocus>
+        </div>
+        <div class="form-group">
+            <label>Email</label>
+            <input type="email" name="email" required>
+        </div>
+        <div class="form-group">
+            <label>Пароль</label>
+            <input type="password" name="password" required>
+        </div>
+
+        <!-- Поля только для сотрудника -->
+        <div id="employee-fields" style="display:none;">
+            <div style="border-top:1px solid #ccc; margin:16px 0; padding-top:16px;">
+                <p style="font-size:0.85rem; color:#555; margin-bottom:14px;">Дополнительные данные для сотрудника</p>
+                <div class="form-group">
+                    <label>Должность</label>
+                    <select name="position">
+                        <option value="">— выберите —</option>
+                        <option value="manager">Менеджер</option>
+                        <option value="warehouse">Складской работник</option>
+                        <option value="courier">Курьер</option>
+                        <option value="support">Поддержка</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Код доступа сотрудника</label>
+                    <input type="text" name="employee_code" placeholder="Введите код, выданный администратором">
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width:100%; padding:10px;">Создать аккаунт</button>
+    </form>
+
+    <p style="margin-top:16px; font-size:0.9rem; text-align:center;">
+        Уже есть аккаунт? <a href="{{ url_for('login') }}">Войти</a>
+    </p>
+</div>
+
+<script>
+function switchRole(role) {
+    document.getElementById('role-input').value = role;
+    var isEmployee = role === 'employee';
+    document.getElementById('employee-fields').style.display = isEmployee ? 'block' : 'none';
+    document.getElementById('tab-customer').style.background = isEmployee ? '#fff' : '#000';
+    document.getElementById('tab-customer').style.color    = isEmployee ? '#000' : '#fff';
+    document.getElementById('tab-employee').style.background = isEmployee ? '#000' : '#fff';
+    document.getElementById('tab-employee').style.color    = isEmployee ? '#fff' : '#000';
+}
+</script>
+{% endblock %}

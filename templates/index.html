@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% block title %}Главная — Магазин{% endblock %}
+
+{% block content %}
+<section style="border: 1px solid #000; padding: 32px; margin-bottom: 32px; text-align: center;">
+    <h1 style="font-size: 2rem; margin-bottom: 12px;">Добро пожаловать в МойМагазин</h1>
+    <p style="color: #555; margin-bottom: 20px;">Лучшие товары по доступным ценам</p>
+    <a class="btn btn-primary" href="{{ url_for('catalog') }}">Перейти в каталог</a>
+</section>
+
+<section style="margin-bottom: 32px;">
+    <h2 style="margin-bottom: 16px; border-bottom: 1px solid #000; padding-bottom: 8px;">Популярные товары</h2>
+    <div class="product-grid">
+        {% for p in featured %}
+        <div class="product-card">
+            <div class="img-placeholder">[ фото ]</div>
+            <h3><a href="{{ url_for('product', product_id=p.id) }}">{{ p.name }}</a></h3>
+            <div class="price">{{ p.price }} ₽</div>
+            <div style="font-size:0.8rem; color:#666; margin-bottom:8px;">{{ p.category }}</div>
+            <form method="post" action="{{ url_for('cart_add', product_id=p.id) }}">
+                <button type="submit" class="btn" style="width:100%">В корзину</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+{% if not session.get('user') %}
+<section style="border: 1px solid #000; padding: 24px; margin-bottom: 32px;">
+    <h2 style="margin-bottom: 16px;">Как зарегистрироваться?</h2>
+    <div style="display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-bottom: 20px;">
+        <div style="border: 1px solid #ccc; padding: 16px;">
+            <div style="font-size: 1.5rem; font-weight: bold; margin-bottom: 8px;">1</div>
+            <h3 style="margin-bottom: 6px; font-size: 0.95rem;">Нажмите «Регистрация»</h3>
+            <p style="font-size: 0.82rem; color: #555;">Кнопка находится в правом верхнем углу страницы.</p>
+        </div>
+        <div style="border: 1px solid #ccc; padding: 16px;">
+            <div style="font-size: 1.5rem; font-weight: bold; margin-bottom: 8px;">2</div>
+            <h3 style="margin-bottom: 6px; font-size: 0.95rem;">Заполните форму</h3>
+            <p style="font-size: 0.82rem; color: #555;">Укажите имя, email, пароль и выберите тип аккаунта: покупатель или сотрудник.</p>
+        </div>
+        <div style="border: 1px solid #ccc; padding: 16px;">
+            <div style="font-size: 1.5rem; font-weight: bold; margin-bottom: 8px;">3</div>
+            <h3 style="margin-bottom: 6px; font-size: 0.95rem;">Начните пользоваться</h3>
+            <p style="font-size: 0.82rem; color: #555;">После регистрации вы сразу сможете делать покупки или управлять магазином.</p>
+        </div>
+    </div>
+    <div style="text-align: center;">
+        <a class="btn btn-primary" href="{{ url_for('register') }}">Зарегистрироваться</a>
+        <a class="btn" href="{{ url_for('login') }}" style="margin-left: 8px;">Уже есть аккаунт — Войти</a>
+    </div>
+</section>
+{% endif %}
+
+<section style="display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-bottom: 32px;">
+    <div style="border: 1px solid #000; padding: 16px;">
+        <h3 style="margin-bottom: 8px;">Быстрая доставка</h3>
+        <p style="font-size: 0.85rem; color: #555;">Доставим ваш заказ в течение 2-5 рабочих дней.</p>
+    </div>
+    <div style="border: 1px solid #000; padding: 16px;">
+        <h3 style="margin-bottom: 8px;">Гарантия качества</h3>
+        <p style="font-size: 0.85rem; color: #555;">Все товары сертифицированы и прошли контроль.</p>
+    </div>
+    <div style="border: 1px solid #000; padding: 16px;">
+        <h3 style="margin-bottom: 8px;">Возврат 30 дней</h3>
+        <p style="font-size: 0.85rem; color: #555;">Не подошло — вернём деньги без лишних вопросов.</p>
+    </div>
+</section>
+{% endblock %}
