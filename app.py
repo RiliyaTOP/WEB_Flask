@@ -14,6 +14,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 login_manager = LoginManager()
 login_manager.init_app(app)
 
+db_session.global_init("db/blogs.sqlite")
 PRODUCTS = []
 
 CATEGORIES = ['Электроника', 'Одежда', 'Книги']
@@ -188,5 +189,4 @@ def not_found(e):
 
 
 if __name__ == '__main__':
-    db_session.global_init("db/blogs.sqlite")
-    serve(app)
+    serve(app, host = '0.0.0.0', port = 8080)
