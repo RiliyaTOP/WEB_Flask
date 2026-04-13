@@ -19,8 +19,6 @@ CATEGORIES = ['Электроника', 'Одежда', 'Книги']
 
 USERS = {}  # email -> {password, name}
 
-db_session.global_init("db/blogs.sqlite")
-
 def get_cart():
     return session.get('cart', {})
 
