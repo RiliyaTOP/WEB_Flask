@@ -4,6 +4,7 @@ from datetime import timedelta
 from data import db_session
 from data.users import User
 from form.users import LoginForm, RegistrationForm
+
 app = Flask(__name__)
 app.secret_key = 'dev-secret-key'
 app.config['SECRET_KEY'] = 'dev-secret-key'
