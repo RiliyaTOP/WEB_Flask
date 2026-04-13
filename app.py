@@ -4,6 +4,7 @@ from datetime import timedelta
 from data import db_session
 from data.users import User
 from form.users import LoginForm, RegistrationForm
+from waitress import serve
 
 app = Flask(__name__)
 app.secret_key = 'dev-secret-key'
@@ -18,6 +19,7 @@ PRODUCTS = []
 CATEGORIES = ['Электроника', 'Одежда', 'Книги']
 
 USERS = {}  # email -> {password, name}
+
 
 def get_cart():
     return session.get('cart', {})
@@ -186,5 +188,5 @@ def not_found(e):
 
 
 if __name__ == '__main__':
-    pass
-#    app.run(debug=True)
+    db_session.global_init("db/blogs.sqlite")
+    serve(app, debug=True)
