@@ -189,4 +189,4 @@ def not_found(e):
 
 if __name__ == '__main__':
     db_session.global_init("db/blogs.sqlite")
-    serve(app, debug=True)
+    serve(app)
