@@ -19,6 +19,7 @@ CATEGORIES = ['Электроника', 'Одежда', 'Книги']
 
 USERS = {}  # email -> {password, name}
 
+db_session.global_init("db/blogs.sqlite")
 
 def get_cart():
     return session.get('cart', {})
@@ -187,5 +188,5 @@ def not_found(e):
 
 
 if __name__ == '__main__':
-    db_session.global_init("db/blogs.sqlite")
+    pass
 #    app.run(debug=True)
