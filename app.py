@@ -4,19 +4,19 @@ from datetime import timedelta
 from data import db_session
 from data.users import User
 from form.users import LoginForm, RegistrationForm
+from waitress import serve
+
 app = Flask(__name__)
 app.secret_key = 'dev-secret-key'
-app.config['SECRET_KEY'] = 'dev-secret-key'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
 
+db_session.global_init("db/blogs.sqlite")
 PRODUCTS = []
 
 CATEGORIES = ['Электроника', 'Одежда', 'Книги']
-
-USERS = {}  # email -> {password, name}
 
 
 def get_cart():
@@ -27,7 +27,7 @@ def cart_count():
     return sum(get_cart().values())
 
 
-# Маршруты 
+# Маршруты
 
 @app.route('/')
 def index():
@@ -57,6 +57,7 @@ def product(product_id):
 
 
 @app.route('/cart')
+@login_required
 def cart():
     cart_data = get_cart()
     items = []
@@ -71,6 +72,7 @@ def cart():
 
 
 @app.route('/cart/add/<int:product_id>', methods=['POST'])
+@login_required
 def cart_add(product_id):
     cart = session.get('cart', {})
     key = str(product_id)
@@ -81,6 +83,7 @@ def cart_add(product_id):
 
 
 @app.route('/cart/remove/<int:product_id>', methods=['POST'])
+@login_required
 def cart_remove(product_id):
     cart = session.get('cart', {})
     cart.pop(str(product_id), None)
@@ -89,12 +92,14 @@ def cart_remove(product_id):
 
 
 @app.route('/cart/clear', methods=['POST'])
+@login_required
 def cart_clear():
     session.pop('cart', None)
     return redirect(url_for('cart'))
 
 
 @app.route('/checkout', methods=['GET', 'POST'])
+@login_required
 def checkout():
     if request.method == 'POST':
         session.pop('cart', None)
@@ -129,17 +134,6 @@ def login():
                                message="Неправильный логин или пароль",
                                form=form)
     return render_template('login.html', form=form,cart_count=cart_count())
-#    if request.method == 'POST':
-#        email = request.form.get('email', '').strip()
-#        password = request.form.get('password', '')
-#        user = USERS.get(email)title='Авторизация', form=form
-#        if user and user['password'] == password:
-#            session['user'] = email
-#            flash('Вы вошли в систему.')
-#            return redirect(url_for('index'))
-#        flash('Неверный email или пароль.')
-#    return render_template('login.html', cart_count=cart_count())
-#
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -153,30 +147,31 @@ def register():
         user = User(
             name=form.name.data,
             email=form.email.data,
-            role=form.role.data
+            role=form.role.data if form.role.data in ['user', 'manager', 'warehouse', 'support', 'courier'] else 'user'
         )
         user.set_password(form.password.data)
         db_sess.add(user)
         db_sess.commit()
-        return redirect('/login')
+        login_user(user)
+        return redirect(url_for('account'))
     return render_template('register.html', title='Регистрация', form=form)
 
 
 @app.route('/logout')
 @login_required
 def logout():
-    session.pop('user', None)
+    logout_user()
     return redirect(url_for('index'))
 
 
 @app.route('/account')
+@login_required
 def account():
-    email = session.get('user')
-    if not email:
-        return redirect(url_for('login'))
-    user = USERS.get(email, {})
-    return render_template('account.html', user=user, email=email, cart_count=cart_count())
-
+    return render_template(
+        'account.html',
+        user=current_user,
+        cart_count=cart_count()
+    )
 
 @app.errorhandler(404)
 def not_found(e):
@@ -186,5 +181,4 @@ def not_found(e):
 
 
 if __name__ == '__main__':
-    db_session.global_init("db/blogs.sqlite")
-    app.run(debug=True)
+    serve(app, host = '0.0.0.0', port = 8000)

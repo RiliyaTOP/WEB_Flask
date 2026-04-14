@@ -18,7 +18,8 @@
     </div>
 
     <form action="" method="post">
-        <input type="hidden" name="role" id="role-input" value="customer">
+    {{ form.hidden_tag() }}
+        <input type="hidden" name="account_type" id="role-input" value="customer">
 
         <div class="form-group">
             <p>
@@ -86,12 +87,24 @@
 <script>
 function switchRole(role) {
     document.getElementById('role-input').value = role;
+
+    var select = document.querySelector('select[name="role"]');
+
     var isEmployee = role === 'employee';
+
+    if (isEmployee) {
+        select.value = 'manager'; // значение по умолчанию
+    } else {
+        select.value = 'user';
+    }
+
     document.getElementById('employee-fields').style.display = isEmployee ? 'block' : 'none';
+
     document.getElementById('tab-customer').style.background = isEmployee ? '#fff' : '#000';
-    document.getElementById('tab-customer').style.color    = isEmployee ? '#000' : '#fff';
+    document.getElementById('tab-customer').style.color = isEmployee ? '#000' : '#fff';
+
     document.getElementById('tab-employee').style.background = isEmployee ? '#000' : '#fff';
-    document.getElementById('tab-employee').style.color    = isEmployee ? '#fff' : '#000';
+    document.getElementById('tab-employee').style.color = isEmployee ? '#fff' : '#000';
 }
 </script>
 {% endblock %}

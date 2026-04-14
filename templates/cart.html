@@ -15,10 +15,15 @@
             <th></th>
         </tr>
     </thead>
+
     <tbody>
         {% for item in items %}
         <tr>
-            <td><a href="{{ url_for('product', product_id=item.product.id) }}">{{ item.product.name }}</a></td>
+            <td>
+                <a href="{{ url_for('product', product_id=item.product.id) }}">
+                    {{ item.product.name }}
+                </a>
+            </td>
             <td>{{ item.product.price }} ₽</td>
             <td>{{ item.qty }}</td>
             <td>{{ item.subtotal }} ₽</td>
@@ -37,13 +42,28 @@
 </div>
 
 <div style="margin-top:16px; display:flex; gap:12px; justify-content:flex-end;">
+
     <form method="post" action="{{ url_for('cart_clear') }}">
         <button type="submit" class="btn">Очистить корзину</button>
     </form>
-    <a class="btn btn-primary" href="{{ url_for('checkout') }}">Оформить заказ</a>
+
+    {% if current_user.is_authenticated %}
+        <a class="btn btn-primary" href="{{ url_for('checkout') }}">
+            Оформить заказ
+        </a>
+    {% else %}
+        <a class="btn btn-primary" href="{{ url_for('login') }}">
+            Войти для оформления
+        </a>
+    {% endif %}
+
 </div>
 
 {% else %}
-<p style="color:#555;">Корзина пуста. <a href="{{ url_for('catalog') }}">Перейти в каталог</a>.</p>
+<p style="color:#555;">
+    Корзина пуста.
+    <a href="{{ url_for('catalog') }}">Перейти в каталог</a>.
+</p>
 {% endif %}
+
 {% endblock %}

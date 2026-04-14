@@ -6,34 +6,50 @@
 
 <form method="get" style="display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap;">
     <input type="text" name="q" value="{{ q }}" placeholder="Поиск..." style="padding:8px; border:1px solid #000; flex:1; min-width:180px;">
+
     <select name="category" style="padding:8px; border:1px solid #000;">
         <option value="">Все категории</option>
         {% for cat in categories %}
         <option value="{{ cat }}" {% if cat == selected_category %}selected{% endif %}>{{ cat }}</option>
         {% endfor %}
     </select>
+
     <button type="submit" class="btn">Найти</button>
+
     {% if selected_category or q %}
     <a class="btn" href="{{ url_for('catalog') }}">Сбросить</a>
     {% endif %}
 </form>
 
-<!-- Товары -->
 {% if products %}
 <div class="product-grid">
     {% for p in products %}
     <div class="product-card">
         <div class="img-placeholder">[ фото ]</div>
-        <h3><a href="{{ url_for('product', product_id=p.id) }}">{{ p.name }}</a></h3>
+
+        <h3>
+            <a href="{{ url_for('product', product_id=p.id) }}">{{ p.name }}</a>
+        </h3>
+
         <div class="price">{{ p.price }} ₽</div>
-        <div style="font-size:0.8rem; color:#666; margin-bottom:10px;">{{ p.category }}</div>
+        <div style="font-size:0.8rem; color:#666; margin-bottom:10px;">
+            {{ p.category }}
+        </div>
+
+        {% if current_user.is_authenticated %}
         <form method="post" action="{{ url_for('cart_add', product_id=p.id) }}">
             <button type="submit" class="btn" style="width:100%">В корзину</button>
         </form>
+        {% else %}
+        <a href="{{ url_for('login') }}" class="btn" style="width:100%; text-align:center;">
+            Войдите чтобы купить
+        </a>
+        {% endif %}
     </div>
     {% endfor %}
 </div>
 {% else %}
 <p style="color:#555;">Товары не найдены.</p>
 {% endif %}
+
 {% endblock %}

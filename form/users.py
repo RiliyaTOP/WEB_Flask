@@ -15,11 +15,13 @@ class RegistrationForm(FlaskForm):
     role = SelectField(
         'Роль',
         choices=[
+            ('user','Пользователь'),
             ('manager', 'Манеджер'),
             ('warehouse', 'Складской помощник'),
             ('support', 'Поддержка'),
             ('courier', 'Курьер')
         ],
+        default='user',
         validators=[DataRequired()]
     )
     submit = SubmitField('Войти')

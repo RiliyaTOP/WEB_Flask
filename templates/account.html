@@ -18,22 +18,23 @@
         <table style="max-width:400px;">
             <tr>
                 <td style="padding:8px 16px 8px 0; color:#555;">Имя:</td>
-                <td style="padding:8px 0;">{{ user.get('name', '—') }}</td>
+                <td style="padding:8px 0;">{{ user.name or '—' }}</td>
             </tr>
             <tr>
                 <td style="padding:8px 16px 8px 0; color:#555;">Email:</td>
-                <td style="padding:8px 0;">{{ email }}</td>
+                <td style="padding:8px 0;">{{ user.email }}</td>
             </tr>
             <tr>
                 <td style="padding:8px 16px 8px 0; color:#555;">Тип аккаунта:</td>
                 <td style="padding:8px 0;">
-                    {% if user.get('role') == 'employee' %}Сотрудник{% else %}Покупатель{% endif %}
+                    {% if user.role != 'user' %}Сотрудник{% else %}Покупатель{% endif %}
                 </td>
             </tr>
-            {% if user.get('role') == 'employee' and user.get('position') %}
+
+            {% if user.role != 'user' %}
             <tr>
                 <td style="padding:8px 16px 8px 0; color:#555;">Должность:</td>
-                <td style="padding:8px 0;">{{ user.position }}</td>
+                <td style="padding:8px 0;">{{ user.role }}</td>
             </tr>
             {% endif %}
         </table>
