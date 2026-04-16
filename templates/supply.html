@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block title %}Корзина — МойМагазин{% endblock %}
+
+{% block content %}
+<form method="post">
+    {{ form.hidden_tag() }}
+
+    {% for subfield in form.mode %}
+        <label>{{ subfield() }} {{ subfield.label.text }}</label>
+    {% endfor %}
+
+    <div id="name_field">
+        {{ form.name.label }}<br>
+        {{ form.name() }}
+    </div>
+
+    <div id="id_field">
+        {{ form.product_id.label }}<br>
+        {{ form.product_id() }}
+    </div>
+
+    {{ form.submit() }}
+</form>
+
+<script>
+function toggleFields() {
+    const mode = document.querySelector('input[name="mode"]:checked').value;
+
+    document.getElementById('name_field').style.display =
+        mode === 'name' ? 'block' : 'none';
+
+    document.getElementById('id_field').style.display =
+        mode === 'id' ? 'block' : 'none';
+}
+
+document.querySelectorAll('input[name="mode"]').forEach(el => {
+    el.addEventListener('change', toggleFields);
+});
+
+toggleFields(); // при загрузке
+</script>
+{% endblock %}

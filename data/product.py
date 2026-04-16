@@ -10,6 +10,6 @@ class Products(SqlAlchemyBase, UserMixin):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=True, unique=True)
     price = Column(Integer, nullable=True)
-    quantity = Column(String, nullable=True)
+    quantity = Column(Integer, nullable=True)
     #category = Column(Enum("admin", "user", "manager", "warehouse", "support", "courier", name="user_roles"), nullable=True)
     created_date = Column(DateTime, default=datetime.datetime.now)
