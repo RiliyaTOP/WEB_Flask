@@ -2,10 +2,11 @@ from flask import Flask, render_template, redirect, url_for, request, session, f
 from flask_login import LoginManager, login_user, logout_user, current_user, login_required
 from datetime import timedelta
 from data import db_session
+from data.cart import Cart
 from data.users import User
 from data.product import Products
 from form.users import LoginForm, RegistrationForm
-from form.product import NewProductsForm
+from form.product import NewProductsForm, Supply
 from waitress import serve
 from contextlib import contextmanager
 
@@ -34,7 +35,13 @@ def get_cart():
 
 
 def cart_count():
-    return sum(get_cart().values())
+    if not current_user.is_authenticated:
+        return 0
+
+    with session_scope() as db_sess:
+        items = db_sess.query(Cart).filter(Cart.user_id == current_user.id).all()
+
+        return sum(item.quantity for item in items)
 
 
 @contextmanager
@@ -72,26 +79,41 @@ def product(product_id):
 @app.route('/cart')
 @login_required
 def cart():
-    cart_data = get_cart()
-    items = []
-    total = 0
-    for pid, qty in cart_data.items():
-        p = next((x for x in PRODUCTS if x['id'] == int(pid)), None)
-        if p:
-            subtotal = p['price'] * qty
-            items.append({'product': p, 'qty': qty, 'subtotal': subtotal})
-            total += subtotal
-    return render_template('cart.html', items=items, total=total, cart_count=cart_count())
+    with session_scope() as db_sess:
+        items = db_sess.query(Cart).filter_by(user_id=current_user.id).all()
 
+        result = []
+        total = 0
+
+        for item in items:
+            product = db_sess.get(Products, item.product_id)
+            subtotal = product.price * item.quantity
+
+            result.append({
+                'product': product,
+                'qty': item.quantity,
+                'subtotal': subtotal
+            })
+
+            total += subtotal
+
+        return render_template('cart.html', items=result, total=total)
 
 @app.route('/cart/add/<int:product_id>', methods=['POST'])
 @login_required
 def cart_add(product_id):
-    cart = session.get('cart', {})
-    key = str(product_id)
-    cart[key] = cart.get(key, 0) + 1
-    session['cart'] = cart
-    flash('Товар добавлен в корзину.')
+    with session_scope() as db_sess:
+        item = db_sess.query(Cart).filter_by(product_id=product_id, user_id=current_user.id).first()
+        if item:
+            item.quantity += 1
+        else:
+            item = Cart(
+                user_id=current_user.id,
+                product_id=product_id,
+                quantity=1,
+            )
+            db_sess.add(item)
+        db_sess.commit()
     return redirect(request.referrer or url_for('catalog'))
 
 
@@ -111,11 +133,31 @@ def cart_clear():
     return redirect(url_for('cart'))
 
 
+@app.route('/supply', methods=['GET', 'POST'])
+@login_required
+def supply():
+    if current_user.role in ['admin', 'manager', 'warehouse']:
+        form = Supply()   # ✅ ВОТ ТУТ
+
+        if form.validate_on_submit():
+            with session_scope() as db_sess:
+                product = db_sess.query(Products).filter(
+                    Products.name == form.name.data
+                ).first()
+
+                if product:
+                    print(product)
+                    return render_template('supply.html', form=form)
+
+        return render_template('supply.html', form=form)
+
+    return abort(403)
+
 @app.route('/add_product', methods=['GET' ,'POST'])
 @login_required
 def add_product():
     if current_user.role in ['admin', 'manager']:
-        form =NewProductsForm()
+        form = NewProductsForm()
         if form.validate_on_submit():
             with session_scope() as db_sess:
                 if db_sess.query(Products).filter(Products.name == form.name.data).first():
