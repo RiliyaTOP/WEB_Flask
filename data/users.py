@@ -20,6 +20,3 @@ class User(SqlAlchemyBase, UserMixin):
 
     def check_password(self, password):
         return check_password_hash(self.hashed_password, password)
-
-    role = Column(Enum("admin", "user", "manager", "warehouse", "support", "courier", name="user_roles"), nullable=True)
-    created_date = Column(DateTime, default=datetime.datetime.now)

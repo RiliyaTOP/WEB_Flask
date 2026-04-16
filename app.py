@@ -1,11 +1,21 @@
-from flask import Flask, render_template, redirect, url_for, request, session, flash
+from flask import Flask, render_template, redirect, url_for, request, session, flash, abort
 from flask_login import LoginManager, login_user, logout_user, current_user, login_required
 from datetime import timedelta
 from data import db_session
 from data.users import User
+from data.product import Products
 from form.users import LoginForm, RegistrationForm
+from form.product import NewProductsForm
 from waitress import serve
+from contextlib import contextmanager
 
+@contextmanager
+def session_scope():
+    session = db_session.create_session()
+    try:
+        yield session
+    finally:
+        session.close()
 app = Flask(__name__)
 app.secret_key = 'dev-secret-key'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
@@ -27,6 +37,13 @@ def cart_count():
     return sum(get_cart().values())
 
 
+@contextmanager
+def session_scope():
+    session = db_session.create_session()
+    try:
+        yield session
+    finally:
+        session.close()
 # Маршруты
 
 @app.route('/')
@@ -37,15 +54,11 @@ def index():
 
 @app.route('/catalog')
 def catalog():
-    category = request.args.get('category')
-    q = request.args.get('q', '').strip().lower()
-    products = PRODUCTS
-    if category:
-        products = [p for p in products if p['category'] == category]
-    if q:
-        products = [p for p in products if q in p['name'].lower()]
-    return render_template('catalog.html', products=products, categories=CATEGORIES,
-                           selected_category=category, q=q, cart_count=cart_count())
+    with session_scope() as db_sess:
+        products = db_sess.query(Products).all()
+
+    return render_template('catalog.html', products=products, cart_count=cart_count())
+
 
 
 @app.route('/product/<int:product_id>')
@@ -98,6 +111,27 @@ def cart_clear():
     return redirect(url_for('cart'))
 
 
+@app.route('/add_product', methods=['GET' ,'POST'])
+@login_required
+def add_product():
+    if current_user.role in ['admin', 'manager']:
+        form =NewProductsForm()
+        if form.validate_on_submit():
+            with session_scope() as db_sess:
+                if db_sess.query(Products).filter(Products.name == form.name.data).first():
+                    return render_template('add_product.html', form=form,)
+                product = Products(
+                    name=form.name.data,
+                    price=form.price.data,
+                    quantity=form.quantity.data
+                )
+                db_sess.add(product)
+                db_sess.commit()
+                return redirect(url_for('add_product'))
+        return render_template('add_product.html', form=form)
+    else:
+        abort(403)
+
 @app.route('/checkout', methods=['GET', 'POST'])
 @login_required
 def checkout():
@@ -116,8 +150,8 @@ def checkout():
 
 @login_manager.user_loader
 def load_user(user_id):
-    db_sess = db_session.create_session()
-    return db_sess.get(User,user_id)
+    with session_scope() as db_sess:
+        return db_sess.get(User,user_id)
 
 
 
@@ -125,35 +159,35 @@ def load_user(user_id):
 def login():
     form = LoginForm()
     if form.validate_on_submit():
-        db_sess = db_session.create_session()
-        user = db_sess.query(User).filter(User.email == form.email.data).first()
-        if user and user.check_password(form.password.data):
-            login_user(user, remember=form.remember_me.data)
-            return redirect("/")
-        return render_template('login.html',
-                               message="Неправильный логин или пароль",
-                               form=form)
+        with session_scope() as db_sess:
+            user = db_sess.query(User).filter(User.email == form.email.data).first()
+            if user and user.check_password(form.password.data):
+                login_user(user, remember=form.remember_me.data)
+                return redirect("/")
+            return render_template('login.html',
+                                   message="Неправильный логин или пароль",
+                                   form=form)
     return render_template('login.html', form=form,cart_count=cart_count())
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     form = RegistrationForm()
     if form.validate_on_submit():
-        db_sess = db_session.create_session()
-        if db_sess.query(User).filter(User.email == form.email.data).first():
-            return render_template('register.html', title='Регистрация',
-                                   form=form,
-                                   message="Такой пользователь уже есть")
-        user = User(
-            name=form.name.data,
-            email=form.email.data,
-            role=form.role.data if form.role.data in ['user', 'manager', 'warehouse', 'support', 'courier'] else 'user'
-        )
-        user.set_password(form.password.data)
-        db_sess.add(user)
-        db_sess.commit()
-        login_user(user)
-        return redirect(url_for('account'))
+        with session_scope() as db_sess:
+            if db_sess.query(User).filter(User.email == form.email.data).first():
+                return render_template('register.html', title='Регистрация',
+                                       form=form,
+                                       message="Такой пользователь уже есть")
+            user = User(
+                name=form.name.data,
+                email=form.email.data,
+                role=form.role.data if form.role.data in ['user', 'manager', 'warehouse', 'support', 'courier'] else 'user'
+            )
+            user.set_password(form.password.data)
+            db_sess.add(user)
+            db_sess.commit()
+            login_user(user)
+            return redirect(url_for('account'))
     return render_template('register.html', title='Регистрация', form=form)
 
 

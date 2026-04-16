@@ -3,14 +3,25 @@
 
 {% block content %}
 <div style="max-width:400px; margin:0 auto;">
-    <h1 style="margin-bottom:24px;">Вход в аккаунт</h1>
+    <h1 style="margin-bottom:24px;">Внести продукт в базу</h1>
     <form action="" method="post">
         {{ form.hidden_tag() }}
         <div class="form-group">
             <p>
-            {{ form.email.label }}<br>
-            {{ form.email(class="form-control", type="email") }}<br>
-            {% for error in form.email.errors %}
+        {{ form.name.label }}<br>
+        {{ form.name(class="form-control", type="name") }}<br>
+        {% for error in form.name.errors %}
+            <p class="alert alert-danger" role="alert">
+                {{ error }}
+            </p>
+        {% endfor %}
+    </p>
+        </div>
+        <div class="form-group">
+        <p>
+            {{ form.price.label }}<br>
+            {{ form.price(class="form-control", type="price") }}<br>
+            {% for error in form.price.errors %}
                 <div class="alert alert-danger" role="alert">
                     {{ error }}
                 </div>
@@ -19,9 +30,9 @@
         </div>
         <div class="form-group">
         <p>
-            {{ form.password.label }}<br>
-            {{ form.password(class="form-control", type="password") }}<br>
-            {% for error in form.password.errors %}
+            {{ form.quantity.label }}<br>
+            {{ form.quantity(class="form-control", type="quantity") }}<br>
+            {% for error in form.quantity.errors %}
                 <div class="alert alert-danger" role="alert">
                     {{ error }}
                 </div>
@@ -30,9 +41,5 @@
         </div>
         <button type="submit" class="btn btn-primary" style="width:100%; padding:10px;">{{ form.submit(type="submit", class="btn btn-primary") }}</button>
     </form>
-    <p style="margin-top:16px; font-size:0.9rem; text-align:center;">
-        Нет аккаунта? <a href="{{ url_for('register') }}">Зарегистрироваться</a>
-    </p>
 </div>
 {% endblock %}
-
