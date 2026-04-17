@@ -57,6 +57,9 @@
     </nav>
     <div class="header-actions">
     {% if current_user.is_authenticated %}
+        {% if current_user.role in ["admin", "manager", "warehouse"] %}
+        <a href="{{ url_for('add_product') }}">+ Добавить товар</a>
+        {% endif %}
         <a href="{{ url_for('account') }}">Аккаунт</a>
         <a href="{{ url_for('logout') }}">Выйти</a>
     {% else %}

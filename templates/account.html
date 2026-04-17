@@ -9,8 +9,8 @@
         <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
             <li><a href="{{ url_for('account') }}" style="color:#000;">Профиль</a></li>
             <li><a href="#" style="color:#000;">Мои заказы</a></li>
-            {% if current_user.role == "admin" or current_user.role == "manager" %}
-                <li><a href="{{ url_for('add_product') }}">Добавить продукт</a></li>
+            {% if current_user.role in ["admin", "manager", "warehouse"] %}
+                <li><a href="{{ url_for('add_product') }}" style="color:#000;">Добавить товар</a></li>
             {% endif %}
             <li><a href="{{ url_for('logout') }}" style="color:#000;">Выйти</a></li>
         </ul>

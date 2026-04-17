@@ -5,10 +5,13 @@ from data import db_session
 from data.cart import Cart
 from data.users import User
 from data.product import Products
+from data.product_image import ProductImage
 from form.users import LoginForm, RegistrationForm
 from form.product import NewProductsForm, Supply
 from waitress import serve
 from contextlib import contextmanager
+import os
+import uuid
 
 @contextmanager
 def session_scope():
@@ -20,6 +23,15 @@ def session_scope():
 app = Flask(__name__)
 app.secret_key = 'dev-secret-key'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
+app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
+ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
+
+
+def save_photo(file):
+    ext = file.filename.rsplit('.', 1)[-1].lower()
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+    return filename
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -63,17 +75,23 @@ def index():
 def catalog():
     with session_scope() as db_sess:
         products = db_sess.query(Products).all()
-
-    return render_template('catalog.html', products=products, cart_count=cart_count())
+        images = {img.product_id: url_for('static', filename=f'uploads/{img.filename}')
+                  for img in db_sess.query(ProductImage).all()}
+    is_staff = current_user.is_authenticated and current_user.role in ['admin', 'manager', 'warehouse']
+    return render_template('catalog.html', products=products, images=images,
+                           is_staff=is_staff, cart_count=cart_count())
 
 
 
 @app.route('/product/<int:product_id>')
 def product(product_id):
-    item = next((p for p in PRODUCTS if p['id'] == product_id), None)
-    if item is None:
-        return render_template('404.html'), 404
-    return render_template('product.html', product=item, cart_count=cart_count())
+    with session_scope() as db_sess:
+        item = db_sess.get(Products, product_id)
+        if item is None:
+            return render_template('404.html'), 404
+        image = db_sess.query(ProductImage).filter_by(product_id=product_id).first()
+        image_url = url_for('static', filename=f'uploads/{image.filename}') if image else None
+        return render_template('product.html', product=item, image_url=image_url, cart_count=cart_count())
 
 
 @app.route('/cart')
@@ -120,17 +138,37 @@ def cart_add(product_id):
 @app.route('/cart/remove/<int:product_id>', methods=['POST'])
 @login_required
 def cart_remove(product_id):
-    cart = session.get('cart', {})
-    cart.pop(str(product_id), None)
-    session['cart'] = cart
+    with session_scope() as db_sess:
+        item = db_sess.query(Cart).filter_by(product_id=product_id, user_id=current_user.id).first()
+        if item:
+            db_sess.delete(item)
+            db_sess.commit()
     return redirect(url_for('cart'))
 
 
 @app.route('/cart/clear', methods=['POST'])
 @login_required
 def cart_clear():
-    session.pop('cart', None)
+    with session_scope() as db_sess:
+        db_sess.query(Cart).filter_by(user_id=current_user.id).delete()
+        db_sess.commit()
     return redirect(url_for('cart'))
+
+
+@app.route('/product/delete/<int:product_id>', methods=['POST'])
+@login_required
+def product_delete(product_id):
+    if current_user.role not in ['admin', 'manager', 'warehouse']:
+        abort(403)
+    with session_scope() as db_sess:
+        db_sess.query(ProductImage).filter_by(product_id=product_id).delete()
+        db_sess.query(Cart).filter_by(product_id=product_id).delete()
+        product = db_sess.get(Products, product_id)
+        if product:
+            db_sess.delete(product)
+            db_sess.commit()
+            flash(f'Товар «{product.name}» удалён.')
+    return redirect(url_for('catalog'))
 
 
 @app.route('/supply', methods=['GET', 'POST'])
@@ -153,26 +191,32 @@ def supply():
 
     return abort(403)
 
-@app.route('/add_product', methods=['GET' ,'POST'])
+@app.route('/add_product', methods=['GET', 'POST'])
 @login_required
 def add_product():
-    if current_user.role in ['admin', 'manager']:
-        form = NewProductsForm()
-        if form.validate_on_submit():
-            with session_scope() as db_sess:
-                if db_sess.query(Products).filter(Products.name == form.name.data).first():
-                    return render_template('add_product.html', form=form,)
-                product = Products(
-                    name=form.name.data,
-                    price=form.price.data,
-                    quantity=form.quantity.data
-                )
-                db_sess.add(product)
-                db_sess.commit()
-                return redirect(url_for('add_product'))
-        return render_template('add_product.html', form=form)
-    else:
+    if current_user.role not in ['admin', 'manager', 'warehouse']:
         abort(403)
+    form = NewProductsForm()
+    if form.validate_on_submit():
+        with session_scope() as db_sess:
+            if db_sess.query(Products).filter(Products.name == form.name.data).first():
+                flash('Товар с таким названием уже существует.')
+                return render_template('add_product.html', form=form, cart_count=cart_count())
+            product = Products(
+                name=form.name.data,
+                price=form.price.data,
+                quantity=form.quantity.data
+            )
+            db_sess.add(product)
+            db_sess.flush()
+            if form.photo.data and form.photo.data.filename:
+                filename = save_photo(form.photo.data)
+                img = ProductImage(product_id=product.id, filename=filename)
+                db_sess.add(img)
+            db_sess.commit()
+            flash(f'Товар «{product.name}» добавлен.')
+            return redirect(url_for('catalog'))
+    return render_template('add_product.html', form=form, cart_count=cart_count())
 
 @app.route('/checkout', methods=['GET', 'POST'])
 @login_required
