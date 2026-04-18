@@ -1,5 +1,6 @@
 from flask import Flask, render_template, redirect, url_for, request, session, flash, abort
 from flask_login import LoginManager, login_user, logout_user, current_user, login_required
+from flask_mail import Mail
 from datetime import timedelta
 from data import db_session
 from data.cart import Cart
@@ -10,6 +11,9 @@ from form.users import LoginForm, RegistrationForm
 from form.product import NewProductsForm, Supply
 from waitress import serve
 from contextlib import contextmanager
+from services.otp_service import create_otp, verify_otp
+from services.rate_limit import check_rate, set_rate
+from utils.mail_utils import send_otp_email
 import os
 import uuid
 
@@ -29,6 +33,16 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
 
+app.config.update(
+    MAIL_SERVER=os.getenv("MAIL_SERVER"),
+    MAIL_PORT=os.getenv("MAIL_PORT"),
+    MAIL_USE_TLS=True,
+    MAIL_USERNAME= os.getenv("MAIL_USERNAME"),
+    MAIL_PASSWORD=os.getenv("MAIL_PASSWORD"),
+    MAIL_DEFAULT_SENDER='no-reply@mpit.su'
+)
+
+mail = Mail(app)
 
 def save_photo(file):
     # генерируем уникальное имя файла чтобы не было конфликтов
@@ -55,6 +69,46 @@ def cart_count():
         items = db_sess.query(Cart).filter(Cart.user_id == current_user.id).all()
         return sum(item.quantity for item in items)
 
+
+
+@app.route('/auth/request-code', methods=['POST'])
+def request_code():
+    email = request.json['email']
+
+    if check_rate(email):
+        return {"error": "too_many_requests"}, 429
+
+    code = create_otp(email)
+    send_otp_email(mail, email, code)
+
+    set_rate(email)
+
+    return {"status": "sent"}
+
+
+@app.route('/auth/verify', methods=['POST'])
+def verify():
+    email = request.json['email']
+    code = request.json['code']
+
+    result = verify_otp(email, code)
+
+    if result == "expired":
+        return {"error": "expired"}, 400
+    if result == "blocked":
+        return {"error": "too_many_attempts"}, 429
+    if result == "invalid":
+        return {"error": "invalid"}, 400
+
+    with session_scope() as db_sess:
+        user = db_sess.query(User).filter(User.email == email).first()
+
+        if not user:
+            return {"error": "user not found"}, 404
+
+        login_user(user, remember=True)
+
+    return {"status": "logged_in"}
 
 @app.route('/')
 def index():
