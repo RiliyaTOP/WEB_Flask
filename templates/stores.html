@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block title %}Магазины — Магазин{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Наши магазины</h2>
+
+<div class="row g-4 mb-4">
+    {% for shop in shops %}
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100" id="card-{{ loop.index0 }}"
+             style="cursor:pointer;"
+             onclick="showShop({{ loop.index0 }})">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-shop text-dark"></i> {{ shop.name }}
+                </h5>
+                <p class="text-muted mb-0"><i class="bi bi-geo-alt"></i> {{ shop.address }}</p>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-dark text-white">
+        <span id="map-title">Все магазины</span>
+    </div>
+    <div id="map" style="height: 480px;"></div>
+</div>
+
+<!-- сначала подключаем яндекс карты, потом инициализируем -->
+<script src="https://api-maps.yandex.ru/2.1/?apikey=f3a0fe3a-b07e-4840-a1da-06f18b2ddf13&lang=ru_RU" type="text/javascript"></script>
+<script type="text/javascript">
+var shops = [
+    {% for shop in shops %}
+    { name: "{{ shop.name }}", address: "{{ shop.address }}", lat: {{ shop.lat }}, lng: {{ shop.lng }} }{% if not loop.last %},{% endif %}
+    {% endfor %}
+];
+
+var myMap;
+var placemarks = [];
+
+ymaps.ready(init);
+
+function init() {
+    myMap = new ymaps.Map('map', {
+        center: [55.751244, 37.618423],
+        zoom: 10,
+        controls: ['zoomControl', 'fullscreenControl']
+    });
+
+    shops.forEach(function(shop, i) {
+        var placemark = new ymaps.Placemark(
+            [shop.lat, shop.lng],
+            {
+                balloonContentHeader: shop.name,
+                balloonContentBody: shop.address,
+                hintContent: shop.name
+            },
+            { preset: 'islands#darkBlueDotIconWithCaption' }
+        );
+
+        placemark.events.add('click', function() {
+            highlightCard(i);
+            document.getElementById('map-title').textContent = shop.name + ' — ' + shop.address;
+        });
+
+        myMap.geoObjects.add(placemark);
+        placemarks.push(placemark);
+    });
+}
+
+function showShop(index) {
+    var shop = shops[index];
+    myMap.setCenter([shop.lat, shop.lng], 15, { duration: 400 });
+    placemarks[index].balloon.open();
+    highlightCard(index);
+    document.getElementById('map-title').textContent = shop.name + ' — ' + shop.address;
+}
+
+function highlightCard(index) {
+    document.querySelectorAll('[id^="card-"]').forEach(function(el) {
+        el.classList.remove('border', 'border-dark', 'border-2');
+    });
+    document.getElementById('card-' + index).classList.add('border', 'border-dark', 'border-2');
+}
+</script>
+{% endblock %}

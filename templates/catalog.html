@@ -2,72 +2,81 @@
 {% block title %}Каталог — Магазин{% endblock %}
 
 {% block content %}
-<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
-    <h1>Каталог товаров</h1>
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <h1 class="h3 mb-0">Каталог товаров</h1>
     {% if is_staff %}
-    <a href="{{ url_for('add_product') }}" class="btn btn-primary">+ Добавить товар</a>
+    <a href="{{ url_for('add_product') }}" class="btn btn-dark">
+        <i class="bi bi-plus-lg"></i> Добавить товар
+    </a>
     {% endif %}
 </div>
 
-<form action="" method="get" style="display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap;">
-    <input type="text" name="q" value="{{ q }}" placeholder="Поиск..." style="padding:8px; border:1px solid #000; flex:1; min-width:180px;">
-
-    <select name="category" style="padding:8px; border:1px solid #000;">
-        <option value="">Все категории</option>
-        {% for cat in categories %}
-        <option value="{{ cat }}" {% if cat == selected_category %}selected{% endif %}>{{ cat }}</option>
-        {% endfor %}
-    </select>
-
-    <button type="submit" class="btn">Найти</button>
-
-    {% if selected_category or q %}
-    <a class="btn" href="{{ url_for('catalog') }}">Сбросить</a>
-    {% endif %}
+<form method="get" class="row g-2 mb-4">
+    <div class="col-md-6">
+        <input type="text" name="q" value="{{ q or '' }}" placeholder="Поиск..." class="form-control">
+    </div>
+    <div class="col-md-4">
+        <select name="category" class="form-select">
+            <option value="">Все категории</option>
+            {% for cat in categories %}
+            <option value="{{ cat }}" {% if cat == selected_category %}selected{% endif %}>{{ cat }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-dark w-100">Найти</button>
+        {% if selected_category or q %}
+        <a href="{{ url_for('catalog') }}" class="btn btn-outline-secondary">✕</a>
+        {% endif %}
+    </div>
 </form>
 
 {% if products %}
-<div class="product-grid">
+<div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4">
     {% for p in products %}
-    <div class="product-card">
-        <div class="img-placeholder" style="overflow:hidden;">
-            {% if images and p.id in images %}
-            <img src="{{ images[p.id] }}" alt="{{ p.name }}" style="width:100%; height:100%; object-fit:cover;">
-            {% else %}
-            [ фото ]
-            {% endif %}
+    <div class="col">
+        <div class="card h-100 shadow-sm">
+            <div class="product-img">
+                {% if images and p.id in images %}
+                <img src="{{ images[p.id] }}" alt="{{ p.name }}">
+                {% else %}
+                <span><i class="bi bi-image fs-1 text-secondary"></i></span>
+                {% endif %}
+            </div>
+            <div class="card-body d-flex flex-column">
+                <h6 class="card-title">
+                    <a href="{{ url_for('product', product_id=p.id) }}" class="text-decoration-none text-dark">{{ p.name }}</a>
+                </h6>
+                <p class="fw-bold mb-1">{{ p.price }} ₽</p>
+                <p class="text-muted small mb-3">В наличии: {{ p.quantity }} шт.</p>
+                <div class="mt-auto d-grid gap-2">
+                    {% if current_user.is_authenticated %}
+                    <form method="post" action="{{ url_for('cart_add', product_id=p.id) }}">
+                        <button type="submit" class="btn btn-dark w-100">
+                            <i class="bi bi-cart-plus"></i> В корзину
+                        </button>
+                    </form>
+                    {% if is_staff %}
+                    <form method="post" action="{{ url_for('product_delete', product_id=p.id) }}"
+                          onsubmit="return confirm('Удалить товар «{{ p.name }}»?');">
+                        <button type="submit" class="btn btn-outline-danger w-100 btn-sm">
+                            <i class="bi bi-trash"></i> Удалить
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% else %}
+                    <a href="{{ url_for('login') }}" class="btn btn-outline-dark">Войдите чтобы купить</a>
+                    {% endif %}
+                </div>
+            </div>
         </div>
-
-        <h3>
-            <a href="{{ url_for('product', product_id=p.id) }}">{{ p.name }}</a>
-        </h3>
-
-        <div class="price">{{ p.price }} ₽</div>
-        <div style="font-size:0.8rem; color:#666; margin-bottom:10px;">
-            {{ p.category }}
-        </div>
-
-        {% if current_user.is_authenticated %}
-        <form method="post" action="{{ url_for('cart_add', product_id=p.id) }}">
-            <button type="submit" class="btn" style="width:100%">В корзину</button>
-        </form>
-        {% if is_staff %}
-        <form method="post" action="{{ url_for('product_delete', product_id=p.id) }}"
-              onsubmit="return confirm('Удалить товар «{{ p.name }}»?');"
-              style="margin-top:6px;">
-            <button type="submit" class="btn" style="width:100%; color:#c00; border-color:#c00;">Удалить товар</button>
-        </form>
-        {% endif %}
-        {% else %}
-        <a href="{{ url_for('login') }}" class="btn" style="width:100%; text-align:center;">
-            Войдите чтобы купить
-        </a>
-        {% endif %}
     </div>
     {% endfor %}
 </div>
 {% else %}
-<p style="color:#555;">Товары не найдены.</p>
+<div class="text-center py-5 text-muted">
+    <i class="bi bi-search fs-1"></i>
+    <p class="mt-2">Товары не найдены.</p>
+</div>
 {% endif %}
-
 {% endblock %}

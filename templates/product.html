@@ -2,54 +2,39 @@
 {% block title %}{{ product.name }} — Магазин{% endblock %}
 
 {% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Главная</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('catalog') }}">Каталог</a></li>
+        <li class="breadcrumb-item active">{{ product.name }}</li>
+    </ol>
+</nav>
 
-<p style="margin-bottom:16px; font-size:0.85rem;">
-    <a href="{{ url_for('index') }}">Главная</a> &rsaquo;
-    <a href="{{ url_for('catalog') }}">Каталог</a> &rsaquo;
-    {{ product.name }}
-</p>
-
-<div style="display:grid; grid-template-columns:1fr 1fr; gap:32px;">
-    <div style="border:1px solid #000; height:320px; display:flex; align-items:center; justify-content:center; color:#888; overflow:hidden;">
-        {% if image_url %}
-        <img src="{{ image_url }}" alt="{{ product.name }}" style="width:100%; height:100%; object-fit:cover;">
-        {% else %}
-        [ фото товара ]
-        {% endif %}
+<div class="row g-4">
+    <div class="col-md-5">
+        <div class="card border-0 shadow-sm" style="height:360px; overflow:hidden; display:flex; align-items:center; justify-content:center; background:#f8f9fa;">
+            {% if image_url %}
+            <img src="{{ image_url }}" alt="{{ product.name }}" style="width:100%; height:100%; object-fit:cover;">
+            {% else %}
+            <i class="bi bi-image fs-1 text-secondary"></i>
+            {% endif %}
+        </div>
     </div>
 
-    <div>
-        <h1 style="margin-bottom:12px;">{{ product.name }}</h1>
-
-        <div style="font-size:0.85rem; color:#666; margin-bottom:12px;">
-            Категория: {{ product.category }}
-        </div>
-
-        <div style="font-size:1.6rem; font-weight:bold; margin-bottom:16px;">
-            {{ product.price }} ₽
-        </div>
-
-        <p style="margin-bottom:20px; color:#333;">
-            {{ product.description }}
-        </p>
+    <div class="col-md-7">
+        <h1 class="h2 mb-2">{{ product.name }}</h1>
+        <p class="text-muted mb-2">В наличии: {{ product.quantity }} шт.</p>
+        <p class="fs-3 fw-bold mb-3">{{ product.price }} ₽</p>
 
         {% if current_user.is_authenticated %}
         <form method="post" action="{{ url_for('cart_add', product_id=product.id) }}">
-            <button type="submit" class="btn btn-primary">
-                Добавить в корзину
+            <button type="submit" class="btn btn-dark btn-lg">
+                <i class="bi bi-cart-plus"></i> Добавить в корзину
             </button>
         </form>
         {% else %}
-        <a href="{{ url_for('login') }}" class="btn btn-primary">
-            Войдите чтобы купить
-        </a>
+        <a href="{{ url_for('login') }}" class="btn btn-dark btn-lg">Войдите чтобы купить</a>
         {% endif %}
     </div>
 </div>
-
-<section style="margin-top:32px; border-top:1px solid #ccc; padding-top:24px;">
-    <h2 style="margin-bottom:12px;">Описание</h2>
-    <p style="color:#333;">{{ product.description }}</p>
-</section>
-
 {% endblock %}

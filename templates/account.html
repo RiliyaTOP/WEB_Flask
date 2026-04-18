@@ -2,48 +2,68 @@
 {% block title %}Аккаунт — Магазин{% endblock %}
 
 {% block content %}
-<h1 style="margin-bottom:24px;">Личный кабинет</h1>
+<h2 class="mb-4">Личный кабинет</h2>
 
-<div style="display:grid; grid-template-columns:200px 1fr; gap:32px;">
-    <nav style="border:1px solid #000; padding:16px; align-self:start;">
-        <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
-            <li><a href="{{ url_for('account') }}" style="color:#000;">Профиль</a></li>
-            <li><a href="#" style="color:#000;">Мои заказы</a></li>
-            {% if current_user.role in ["admin", "manager", "warehouse"] %}
-                <li><a href="{{ url_for('add_product') }}" style="color:#000;">Добавить товар</a></li>
-            {% endif %}
-            <li><a href="{{ url_for('logout') }}" style="color:#000;">Выйти</a></li>
-        </ul>
-    </nav>
+<div class="row g-4">
+    <div class="col-md-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="text-center mb-3">
+                    <i class="bi bi-person-circle fs-1 text-secondary"></i>
+                    <p class="fw-bold mt-2 mb-0">{{ user.name }}</p>
+                    <p class="text-muted small">{{ user.email }}</p>
+                </div>
+                <hr>
+                <ul class="nav flex-column gap-1">
+                    <li><a href="{{ url_for('account') }}" class="nav-link text-dark"><i class="bi bi-person"></i> Профиль</a></li>
+                    <li><a href="#" class="nav-link text-dark"><i class="bi bi-bag"></i> Мои заказы</a></li>
+                    <li><a href="{{ url_for('cart') }}" class="nav-link text-dark"><i class="bi bi-cart3"></i> Корзина</a></li>
+                    {% if user.role in ["admin", "manager", "warehouse"] %}
+                    <li><a href="{{ url_for('add_product') }}" class="nav-link text-dark"><i class="bi bi-plus-circle"></i> Добавить товар</a></li>
+                    {% endif %}
+                    <li><a href="{{ url_for('logout') }}" class="nav-link text-danger"><i class="bi bi-box-arrow-right"></i> Выйти</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
 
-    <div>
-        <h2 style="margin-bottom:16px; font-size:1rem; border-bottom:1px solid #000; padding-bottom:8px;">Профиль</h2>
-        <table style="max-width:400px;">
-            <tr>
-                <td style="padding:8px 16px 8px 0; color:#555;">Имя:</td>
-                <td style="padding:8px 0;">{{ user.name or '—' }}</td>
-            </tr>
-            <tr>
-                <td style="padding:8px 16px 8px 0; color:#555;">Email:</td>
-                <td style="padding:8px 0;">{{ user.email }}</td>
-            </tr>
-            <tr>
-                <td style="padding:8px 16px 8px 0; color:#555;">Тип аккаунта:</td>
-                <td style="padding:8px 0;">
-                    {% if user.role != 'user' %}Сотрудник{% else %}Покупатель{% endif %}
-                </td>
-            </tr>
+    <div class="col-md-9">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-dark text-white">Профиль</div>
+            <div class="card-body">
+                <table class="table mb-0">
+                    <tr>
+                        <td class="text-muted" style="width:160px;">Имя</td>
+                        <td>{{ user.name or '—' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Email</td>
+                        <td>{{ user.email }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Тип аккаунта</td>
+                        <td>
+                            {% if user.role == 'user' %}
+                            <span class="badge bg-secondary">Покупатель</span>
+                            {% else %}
+                            <span class="badge bg-dark">Сотрудник</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if user.role != 'user' %}
+                    <tr>
+                        <td class="text-muted">Должность</td>
+                        <td>{{ user.role }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
 
-            {% if user.role != 'user' %}
-            <tr>
-                <td style="padding:8px 16px 8px 0; color:#555;">Должность:</td>
-                <td style="padding:8px 0;">{{ user.role }}</td>
-            </tr>
-            {% endif %}
-        </table>
-
-        <h2 style="margin:24px 0 16px; font-size:1rem; border-bottom:1px solid #000; padding-bottom:8px;">Мои заказы</h2>
-        <p style="color:#555; font-size:0.9rem;">Заказов пока нет.</p>
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white">Мои заказы</div>
+            <div class="card-body text-muted">Заказов пока нет.</div>
+        </div>
     </div>
 </div>
 {% endblock %}

@@ -2,109 +2,75 @@
 {% block title %}Регистрация — Магазин{% endblock %}
 
 {% block content %}
-<div style="max-width:440px; margin:0 auto;">
-    <h1 style="margin-bottom:24px;">Регистрация</h1>
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h2 class="card-title mb-4">Регистрация</h2>
+                {% if message %}
+                <div class="alert alert-danger">{{ message }}</div>
+                {% endif %}
 
-    <!-- Переключатель типа аккаунта -->
-    <div style="display:grid; grid-template-columns:1fr 1fr; border:1px solid #000; margin-bottom:24px;">
-        <button type="button" id="tab-customer" onclick="switchRole('customer')"
-            style="padding:10px; border:none; cursor:pointer; background:#000; color:#fff; font-size:0.9rem;">
-            Покупатель
-        </button>
-        <button type="button" id="tab-employee" onclick="switchRole('employee')"
-            style="padding:10px; border:none; border-left:1px solid #000; cursor:pointer; background:#fff; color:#000; font-size:0.9rem;">
-            Сотрудник
-        </button>
-    </div>
+                <ul class="nav nav-tabs mb-4" id="regTabs">
+                    <li class="nav-item">
+                        <button class="nav-link active" id="tab-customer" type="button" onclick="switchRole('customer')">Покупатель</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="tab-employee" type="button" onclick="switchRole('employee')">Сотрудник</button>
+                    </li>
+                </ul>
 
-    <form action="" method="post">
-    {{ form.hidden_tag() }}
-        <input type="hidden" name="account_type" id="role-input" value="customer">
+                <form method="post">
+                    {{ form.hidden_tag() }}
+                    <div class="mb-3">
+                        {{ form.name.label(class="form-label") }}
+                        {{ form.name(class="form-control") }}
+                        {% for error in form.name.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.email.label(class="form-label") }}
+                        {{ form.email(class="form-control") }}
+                        {% for error in form.email.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.password.label(class="form-label") }}
+                        {{ form.password(class="form-control") }}
+                        {% for error in form.password.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                        {% endfor %}
+                    </div>
 
-        <div class="form-group">
-            <p>
-        {{ form.name.label }}<br>
-        {{ form.name(class="form-control", type="name") }}<br>
-        {% for error in form.name.errors %}
-            <p class="alert alert-danger" role="alert">
-                {{ error }}
-            </p>
-        {% endfor %}
-    </p>
-        </div>
-        <div class="form-group">
-    <p>
-        {{ form.email.label }}<br>
-        {{ form.email(class="form-control", type="email") }}<br>
-        {% for error in form.email.errors %}
-            <p class="alert alert-danger" role="alert">
-                {{ error }}
-            </p>
-        {% endfor %}
-    </p>
-        </div>
-        <div class="form-group">
-            <p>
-        {{ form.password.label }}<br>
-        {{ form.password(class="form-control", type="password") }}<br>
-        {% for error in form.password.errors %}
-            <p class="alert alert-danger" role="alert">
-                {{ error }}
-            </p>
-        {% endfor %}
-    </p>
-        </div>
+                    <div id="employee-fields" style="display:none;">
+                        <hr>
+                        <p class="text-muted small">Дополнительные данные для сотрудника</p>
+                        <div class="mb-3">
+                            {{ form.role.label(class="form-label") }}
+                            {{ form.role(class="form-select") }}
+                        </div>
+                    </div>
 
-        <!-- Поля только для сотрудника -->
-        <div id="employee-fields" style="display:none;">
-            <div style="border-top:1px solid #ccc; margin:16px 0; padding-top:16px;">
-                <p style="font-size:0.85rem; color:#555; margin-bottom:14px;">Дополнительные данные для сотрудника</p>
-                <div class="form-group"><p>
-        {{ form.role.label }}<br>
-        {{ form.role(class="form-control", type="role") }}<br>
-        {% for error in form.role.errors %}
-            <p class="alert alert-danger" role="alert">
-                {{ error }}
-            </p>
-        {% endfor %}
-    </p>
-                </div>
-                <div class="form-group">
-                    <label>Код доступа сотрудника</label>
-                    <input type="text" name="employee_code" placeholder="Введите код, выданный администратором">
-                </div>
+                    <button type="submit" class="btn btn-dark w-100">Зарегистрироваться</button>
+                </form>
+                <p class="text-center mt-3 mb-0 small">
+                    Уже есть аккаунт? <a href="{{ url_for('login') }}">Войти</a>
+                </p>
             </div>
         </div>
-
-        <button type="submit" class="btn btn-primary" style="width:100%; padding:10px;">{{ form.submit(type="submit", class="btn btn-primary") }}</button>
-    </form>
-
-    <p style="margin-top:16px; font-size:0.9rem; text-align:center;">
-        Уже есть аккаунт? <a href="{{ url_for('login') }}">Войти</a>
-    </p>
+    </div>
 </div>
 
 <script>
 function switchRole(role) {
-    document.getElementById('role-input').value = role;
-
-    var select = document.querySelector('select[name="role"]');
-
     var isEmployee = role === 'employee';
-
-    if (isEmployee) {
-        select.value = 'manager'; // значение по умолчанию
-    } else {
-        select.value = 'user';
-    }
-
+    var select = document.querySelector('select[name="role"]');
+    select.value = isEmployee ? 'manager' : 'user';
     document.getElementById('employee-fields').style.display = isEmployee ? 'block' : 'none';
-
-    document.getElementById('tab-customer').style.background = isEmployee ? '#fff' : '#000';
-    document.getElementById('tab-customer').style.color = isEmployee ? '#000' : '#fff';
-
-    document.getElementById('tab-employee').style.background = isEmployee ? '#000' : '#fff';
-    document.getElementById('tab-employee').style.color = isEmployee ? '#fff' : '#000';
+    document.getElementById('tab-customer').classList.toggle('active', !isEmployee);
+    document.getElementById('tab-employee').classList.toggle('active', isEmployee);
 }
 </script>
 {% endblock %}

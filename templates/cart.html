@@ -1,69 +1,64 @@
 {% extends 'base.html' %}
-{% block title %}Корзина — МойМагазин{% endblock %}
+{% block title %}Корзина — Магазин{% endblock %}
 
 {% block content %}
-<h1 style="margin-bottom:24px;">Корзина</h1>
+<h2 class="mb-4">Корзина</h2>
 
 {% if items %}
-<table>
-    <thead>
-        <tr>
-            <th>Товар</th>
-            <th>Цена</th>
-            <th>Количество</th>
-            <th>Сумма</th>
-            <th></th>
-        </tr>
-    </thead>
-
-    <tbody>
-        {% for item in items %}
-        <tr>
-            <td>
-                <a href="{{ url_for('product', product_id=item.product.id) }}">
-                    {{ item.product.name }}
-                </a>
-            </td>
-            <td>{{ item.product.price }} ₽</td>
-            <td>{{ item.qty }}</td>
-            <td>{{ item.subtotal }} ₽</td>
-            <td>
-                <form method="post" action="{{ url_for('cart_remove', product_id=item.product.id) }}">
-                    <button type="submit" class="btn" style="font-size:0.8rem;">Удалить</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-
-<div style="margin-top:20px; text-align:right;">
-    <strong style="font-size:1.2rem;">Итого: {{ total }} ₽</strong>
+<div class="table-responsive">
+    <table class="table align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>Товар</th>
+                <th>Цена</th>
+                <th>Количество</th>
+                <th>Сумма</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>
+                    <a href="{{ url_for('product', product_id=item.product.id) }}" class="text-decoration-none text-dark">
+                        {{ item.product.name }}
+                    </a>
+                </td>
+                <td>{{ item.product.price }} ₽</td>
+                <td>{{ item.qty }}</td>
+                <td class="fw-bold">{{ item.subtotal }} ₽</td>
+                <td>
+                    <form method="post" action="{{ url_for('cart_remove', product_id=item.product.id) }}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 
-<div style="margin-top:16px; display:flex; gap:12px; justify-content:flex-end;">
-
+<div class="d-flex justify-content-between align-items-center mt-3">
     <form method="post" action="{{ url_for('cart_clear') }}">
-        <button type="submit" class="btn">Очистить корзину</button>
+        <button type="submit" class="btn btn-outline-secondary">
+            <i class="bi bi-x-circle"></i> Очистить корзину
+        </button>
     </form>
-
-    {% if current_user.is_authenticated %}
-        <a class="btn btn-primary" href="{{ url_for('checkout') }}">
-            Оформить заказ
+    <div class="text-end">
+        <p class="fs-5 fw-bold mb-2">Итого: {{ total }} ₽</p>
+        <a href="{{ url_for('checkout') }}" class="btn btn-dark">
+            <i class="bi bi-bag-check"></i> Оформить заказ
         </a>
-    {% else %}
-        <a class="btn btn-primary" href="{{ url_for('login') }}">
-            Войти для оформления
-        </a>
-    {% endif %}
-
+    </div>
 </div>
 
 {% else %}
-<p style="color:#555;">
-    Корзина пуста.
-    <a href="{{ url_for('catalog') }}">Перейти в каталог</a>.
-</p>
+<div class="text-center py-5 text-muted">
+    <i class="bi bi-cart-x fs-1"></i>
+    <p class="mt-2">Корзина пуста.</p>
+    <a href="{{ url_for('catalog') }}" class="btn btn-dark mt-2">Перейти в каталог</a>
+</div>
 {% endif %}
-
 {% endblock %}

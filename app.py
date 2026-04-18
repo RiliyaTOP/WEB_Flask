@@ -13,74 +13,64 @@ from contextlib import contextmanager
 import os
 import uuid
 
+# открываем сессию бд и закрываем её после использования
 @contextmanager
 def session_scope():
-    session = db_session.create_session()
+    db_sess = db_session.create_session()
     try:
-        yield session
+        yield db_sess
     finally:
-        session.close()
+        db_sess.close()
+
 app = Flask(__name__)
 app.secret_key = 'dev-secret-key'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
+# папка куда сохраняются фото товаров
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
 
 
 def save_photo(file):
+    # генерируем уникальное имя файла чтобы не было конфликтов
     ext = file.filename.rsplit('.', 1)[-1].lower()
     filename = f"{uuid.uuid4().hex}.{ext}"
     file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
     return filename
 
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 
+# создаём файл бд и все таблицы если их ещё нет
 db_session.global_init("db/blogs.sqlite")
-PRODUCTS = []
 
 CATEGORIES = ['Электроника', 'Одежда', 'Книги']
 
 
-def get_cart():
-    return session.get('cart', {})
-
-
 def cart_count():
+    # для незалогиненных возвращаем 0
     if not current_user.is_authenticated:
         return 0
-
     with session_scope() as db_sess:
         items = db_sess.query(Cart).filter(Cart.user_id == current_user.id).all()
-
         return sum(item.quantity for item in items)
 
 
-@contextmanager
-def session_scope():
-    session = db_session.create_session()
-    try:
-        yield session
-    finally:
-        session.close()
-# Маршруты
-
 @app.route('/')
 def index():
-    featured = PRODUCTS[:3]
-    return render_template('index.html', featured=featured, cart_count=cart_count())
+    return render_template('index.html', featured=[], cart_count=cart_count())
 
 
 @app.route('/catalog')
 def catalog():
     with session_scope() as db_sess:
         products = db_sess.query(Products).all()
+        # собираем словарь product_id -> url фото для удобного доступа в шаблоне
         images = {img.product_id: url_for('static', filename=f'uploads/{img.filename}')
                   for img in db_sess.query(ProductImage).all()}
     is_staff = current_user.is_authenticated and current_user.role in ['admin', 'manager', 'warehouse']
     return render_template('catalog.html', products=products, images=images,
                            is_staff=is_staff, cart_count=cart_count())
-
 
 
 @app.route('/product/<int:product_id>')
@@ -99,37 +89,26 @@ def product(product_id):
 def cart():
     with session_scope() as db_sess:
         items = db_sess.query(Cart).filter_by(user_id=current_user.id).all()
-
         result = []
         total = 0
-
         for item in items:
             product = db_sess.get(Products, item.product_id)
             subtotal = product.price * item.quantity
-
-            result.append({
-                'product': product,
-                'qty': item.quantity,
-                'subtotal': subtotal
-            })
-
+            result.append({'product': product, 'qty': item.quantity, 'subtotal': subtotal})
             total += subtotal
-
         return render_template('cart.html', items=result, total=total)
+
 
 @app.route('/cart/add/<int:product_id>', methods=['POST'])
 @login_required
 def cart_add(product_id):
     with session_scope() as db_sess:
+        # если товар уже в корзине увеличиваем количество, иначе добавляем новую запись
         item = db_sess.query(Cart).filter_by(product_id=product_id, user_id=current_user.id).first()
         if item:
             item.quantity += 1
         else:
-            item = Cart(
-                user_id=current_user.id,
-                product_id=product_id,
-                quantity=1,
-            )
+            item = Cart(user_id=current_user.id, product_id=product_id, quantity=1)
             db_sess.add(item)
         db_sess.commit()
     return redirect(request.referrer or url_for('catalog'))
@@ -161,6 +140,7 @@ def product_delete(product_id):
     if current_user.role not in ['admin', 'manager', 'warehouse']:
         abort(403)
     with session_scope() as db_sess:
+        # сначала удаляем связанные записи чтобы не было ошибок целостности бд
         db_sess.query(ProductImage).filter_by(product_id=product_id).delete()
         db_sess.query(Cart).filter_by(product_id=product_id).delete()
         product = db_sess.get(Products, product_id)
@@ -174,22 +154,16 @@ def product_delete(product_id):
 @app.route('/supply', methods=['GET', 'POST'])
 @login_required
 def supply():
-    if current_user.role in ['admin', 'manager', 'warehouse']:
-        form = Supply()   # ✅ ВОТ ТУТ
+    if current_user.role not in ['admin', 'manager', 'warehouse']:
+        abort(403)
+    form = Supply()
+    if form.validate_on_submit():
+        with session_scope() as db_sess:
+            product = db_sess.query(Products).filter(Products.name == form.name.data).first()
+            if product:
+                return render_template('supply.html', form=form)
+    return render_template('supply.html', form=form)
 
-        if form.validate_on_submit():
-            with session_scope() as db_sess:
-                product = db_sess.query(Products).filter(
-                    Products.name == form.name.data
-                ).first()
-
-                if product:
-                    print(product)
-                    return render_template('supply.html', form=form)
-
-        return render_template('supply.html', form=form)
-
-    return abort(403)
 
 @app.route('/add_product', methods=['GET', 'POST'])
 @login_required
@@ -208,6 +182,7 @@ def add_product():
                 quantity=form.quantity.data
             )
             db_sess.add(product)
+            # flush нужен чтобы получить product.id до commit и привязать к нему фото
             db_sess.flush()
             if form.photo.data and form.photo.data.filename:
                 filename = save_photo(form.photo.data)
@@ -218,27 +193,22 @@ def add_product():
             return redirect(url_for('catalog'))
     return render_template('add_product.html', form=form, cart_count=cart_count())
 
+
 @app.route('/checkout', methods=['GET', 'POST'])
 @login_required
 def checkout():
     if request.method == 'POST':
         session.pop('cart', None)
-        flash('Заказ оформлен! (заглушка)')
+        flash('Заказ оформлен!')
         return redirect(url_for('index'))
-    cart_data = get_cart()
-    total = 0
-    for pid, qty in cart_data.items():
-        p = next((x for x in PRODUCTS if x['id'] == int(pid)), None)
-        if p:
-            total += p['price'] * qty
-    return render_template('checkout.html', total=total, cart_count=cart_count())
+    return render_template('checkout.html', total=0, cart_count=cart_count())
 
 
+# flask-login вызывает это при каждом запросе чтобы загрузить объект пользователя из куки
 @login_manager.user_loader
 def load_user(user_id):
     with session_scope() as db_sess:
-        return db_sess.get(User,user_id)
-
+        return db_sess.get(User, user_id)
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -249,11 +219,10 @@ def login():
             user = db_sess.query(User).filter(User.email == form.email.data).first()
             if user and user.check_password(form.password.data):
                 login_user(user, remember=form.remember_me.data)
-                return redirect("/")
-            return render_template('login.html',
-                                   message="Неправильный логин или пароль",
-                                   form=form)
-    return render_template('login.html', form=form,cart_count=cart_count())
+                return redirect('/')
+            return render_template('login.html', message='Неправильный логин или пароль', form=form)
+    return render_template('login.html', form=form, cart_count=cart_count())
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -262,11 +231,11 @@ def register():
         with session_scope() as db_sess:
             if db_sess.query(User).filter(User.email == form.email.data).first():
                 return render_template('register.html', title='Регистрация',
-                                       form=form,
-                                       message="Такой пользователь уже есть")
+                                       form=form, message='Такой пользователь уже есть')
             user = User(
                 name=form.name.data,
                 email=form.email.data,
+                # если передана неизвестная роль назначаем обычного пользователя
                 role=form.role.data if form.role.data in ['user', 'manager', 'warehouse', 'support', 'courier'] else 'user'
             )
             user.set_password(form.password.data)
@@ -287,18 +256,23 @@ def logout():
 @app.route('/account')
 @login_required
 def account():
-    return render_template(
-        'account.html',
-        user=current_user,
-        cart_count=cart_count()
-    )
+    return render_template('account.html', user=current_user, cart_count=cart_count())
+
+
+@app.route('/stores')
+def stores():
+    shops = [
+        {'name': 'МойМагазин Центральный', 'address': 'Москва, ул. Тверская, 1',      'lat': 55.758400, 'lng': 37.612151},
+        {'name': 'МойМагазин Север',       'address': 'Москва, Ленинградский пр., 80', 'lat': 55.803118, 'lng': 37.530887},
+        {'name': 'МойМагазин Юг',          'address': 'Москва, Варшавское ш., 129',    'lat': 55.645300, 'lng': 37.621564},
+    ]
+    return render_template('stores.html', shops=shops, cart_count=cart_count())
+
 
 @app.errorhandler(404)
 def not_found(e):
     return render_template('404.html'), 404
 
 
-
-
 if __name__ == '__main__':
-    serve(app, host = '127.0.0.1', port = 8000)
+    serve(app, host='127.0.0.1', port=8000)
