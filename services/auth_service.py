@@ -6,7 +6,7 @@ r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
 OTP_TTL = 300
 MAX_ATTEMPTS = 5
-BLOCK_TIME = 300  # 5 минут блокировки
+BLOCK_TIME = 300
 
 
 def create_otp(email):
@@ -15,7 +15,6 @@ def create_otp(email):
 
     r.setex(f"otp:{email}", OTP_TTL, hashed)
 
-    # сбрасываем попытки при новом коде
     r.delete(f"otp_attempts:{email}")
     r.delete(f"otp_block:{email}")
 
@@ -35,8 +34,6 @@ def verify_otp(email, code):
         return "expired"
 
     attempts_key = f"otp_attempts:{email}"
-
-    # увеличиваем попытки
     attempts = r.incr(attempts_key)
     r.expire(attempts_key, OTP_TTL)
 
@@ -47,7 +44,7 @@ def verify_otp(email, code):
     if hashlib.sha256(code.encode()).hexdigest() != saved:
         return "invalid"
 
-    # успех — очищаем
+    # код верный, убираем всё связанное с этим otp
     r.delete(f"otp:{email}")
     r.delete(attempts_key)
 

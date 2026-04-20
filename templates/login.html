@@ -12,23 +12,19 @@
                 <div class="alert alert-danger">{{ message }}</div>
                 {% endif %}
 
-                <!-- переключатель -->
                 <ul class="nav nav-tabs mb-3">
                     <li class="nav-item">
-                        <button type="button" class="nav-link active" id="tab-password"
-                                onclick="switchMode('password')">
-                            Пароль
+                        <button class="nav-link active" id="tab-password" onclick="switchMode('password')">
+                            <i class="bi bi-person-badge"></i> Сотрудник
                         </button>
                     </li>
                     <li class="nav-item">
-                        <button type="button" class="nav-link" id="tab-otp"
-                                onclick="switchMode('otp')">
-                            OTP
+                        <button class="nav-link" id="tab-otp" onclick="switchMode('otp')">
+                            <i class="bi bi-envelope"></i> Покупатель (OTP)
                         </button>
                     </li>
                 </ul>
 
-                <!-- FORM -->
                 <form method="post" id="login-form">
                     {{ form.hidden_tag() }}
 
@@ -37,26 +33,24 @@
                         {{ form.email(class="form-control", id="email") }}
                     </div>
 
-                    <!-- PASSWORD -->
                     <div id="password-block">
                         <div class="mb-3">
                             {{ form.password.label(class="form-label") }}
                             {{ form.password(class="form-control") }}
                         </div>
+                        <div class="mb-3">
+                            {{ form.remember_me() }} {{ form.remember_me.label }}
+                        </div>
                     </div>
 
-                    <!-- OTP -->
                     <div id="otp-block" style="display:none;">
                         <div class="mb-2">
-                            <button type="button" class="btn btn-outline-dark w-100"
-                                    onclick="sendCode()">
-                                Получить код
+                            <button type="button" class="btn btn-outline-dark w-100" onclick="sendCode()">
+                                Получить код на email
                             </button>
                         </div>
-
                         <div class="mb-3">
-                            <input type="text" name="code" class="form-control"
-                                   placeholder="Введите код из email">
+                            <input type="text" name="code" class="form-control" placeholder="Введите код из email">
                         </div>
                     </div>
 
@@ -76,39 +70,27 @@ let mode = "password";
 
 function switchMode(m) {
     mode = m;
-
     document.getElementById("password-block").style.display = m === "password" ? "block" : "none";
     document.getElementById("otp-block").style.display = m === "otp" ? "block" : "none";
-
     document.getElementById("tab-password").classList.toggle("active", m === "password");
     document.getElementById("tab-otp").classList.toggle("active", m === "otp");
 }
 
-// запрос кода OTP
 async function sendCode() {
     const email = document.getElementById("email").value;
-
     const res = await fetch("/auth/request-code", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({email})
     });
-
-    if (res.ok) {
-        alert("Код отправлен на email");
-    } else {
-        alert("Ошибка / слишком часто запрашиваете код");
-    }
+    alert(res.ok ? "Код отправлен на email" : "Ошибка или слишком частый запрос");
 }
 
-// если OTP режим — блокируем password отправку
 document.getElementById("login-form").addEventListener("submit", function(e) {
     if (mode === "otp") {
         e.preventDefault();
-
         const email = document.getElementById("email").value;
         const code = document.querySelector('input[name="code"]').value;
-
         fetch("/auth/verify", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -116,14 +98,10 @@ document.getElementById("login-form").addEventListener("submit", function(e) {
         })
         .then(r => r.json())
         .then(data => {
-            if (data.status === "logged_in") {
-                window.location.href = "/";
-            } else {
-                alert(data.error || "Ошибка входа");
-            }
+            if (data.status === "logged_in") window.location.href = "/";
+            else alert(data.error || "Ошибка входа");
         });
     }
 });
 </script>
-
 {% endblock %}

@@ -7,8 +7,12 @@ from data.cart import Cart
 from data.users import User
 from data.product import Products
 from data.product_image import ProductImage
-from form.users import LoginForm, RegistrationForm
+from form.users import LoginForm, RegistrationForm, StaffRegistrationForm
+from data.employee import Employee
 from form.product import NewProductsForm, Supply
+from form.store import StoreForm
+from data.store import Store
+from data.review import Review
 from waitress import serve
 from contextlib import contextmanager
 from services.otp_service import create_otp, verify_otp
@@ -17,7 +21,7 @@ from utils.mail_utils import send_otp_email
 import os
 import uuid
 
-# открываем сессию бд и закрываем её после использования
+
 @contextmanager
 def session_scope():
     db_sess = db_session.create_session()
@@ -26,10 +30,10 @@ def session_scope():
     finally:
         db_sess.close()
 
+
 app = Flask(__name__)
 app.secret_key = 'dev-secret-key'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
-# папка куда сохраняются фото товаров
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
 
@@ -37,15 +41,15 @@ app.config.update(
     MAIL_SERVER=os.getenv("MAIL_SERVER"),
     MAIL_PORT=os.getenv("MAIL_PORT"),
     MAIL_USE_TLS=True,
-    MAIL_USERNAME= os.getenv("MAIL_USERNAME"),
+    MAIL_USERNAME=os.getenv("MAIL_USERNAME"),
     MAIL_PASSWORD=os.getenv("MAIL_PASSWORD"),
     MAIL_DEFAULT_SENDER='no-reply@mpit.su'
 )
 
 mail = Mail(app)
 
+
 def save_photo(file):
-    # генерируем уникальное имя файла чтобы не было конфликтов
     ext = file.filename.rsplit('.', 1)[-1].lower()
     filename = f"{uuid.uuid4().hex}.{ext}"
     file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
@@ -55,20 +59,22 @@ def save_photo(file):
 login_manager = LoginManager()
 login_manager.init_app(app)
 
-# создаём файл бд и все таблицы если их ещё нет
 db_session.global_init("db/blogs.sqlite")
 
 CATEGORIES = ['Электроника', 'Одежда', 'Книги']
 
 
 def cart_count():
-    # для незалогиненных возвращаем 0
     if not current_user.is_authenticated:
         return 0
     with session_scope() as db_sess:
         items = db_sess.query(Cart).filter(Cart.user_id == current_user.id).all()
         return sum(item.quantity for item in items)
 
+
+@app.context_processor
+def inject_cart_count():
+    return dict(cart_count=cart_count())
 
 
 @app.route('/auth/request-code', methods=['POST'])
@@ -80,7 +86,6 @@ def request_code():
 
     code = create_otp(email)
     send_otp_email(mail, email, code)
-
     set_rate(email)
 
     return {"status": "sent"}
@@ -102,29 +107,39 @@ def verify():
 
     with session_scope() as db_sess:
         user = db_sess.query(User).filter(User.email == email).first()
-
         if not user:
             return {"error": "user not found"}, 404
-
         login_user(user, remember=True)
 
     return {"status": "logged_in"}
 
+
 @app.route('/')
 def index():
-    return render_template('index.html', featured=[], cart_count=cart_count())
+    return render_template('index.html', featured=[])
 
 
 @app.route('/catalog')
 def catalog():
+    q = request.args.get('q', '').strip()
+    selected_category = request.args.get('category', '')
     with session_scope() as db_sess:
-        products = db_sess.query(Products).all()
-        # собираем словарь product_id -> url фото для удобного доступа в шаблоне
+        query = db_sess.query(Products)
+        if q:
+            query = query.filter(Products.name.ilike(f'%{q}%'))
+        products = query.all()
+        # картинки собираем заранее, чтобы не делать запрос на каждый товар
         images = {img.product_id: url_for('static', filename=f'uploads/{img.filename}')
                   for img in db_sess.query(ProductImage).all()}
+        all_reviews = db_sess.query(Review).all()
+    ratings = {}
+    for rev in all_reviews:
+        ratings.setdefault(rev.product_id, []).append(rev.rating)
+    ratings = {pid: round(sum(vals) / len(vals), 1) for pid, vals in ratings.items()}
     is_staff = current_user.is_authenticated and current_user.role in ['admin', 'manager', 'warehouse']
     return render_template('catalog.html', products=products, images=images,
-                           is_staff=is_staff, cart_count=cart_count())
+                           is_staff=is_staff, ratings=ratings, q=q,
+                           categories=CATEGORIES, selected_category=selected_category)
 
 
 @app.route('/product/<int:product_id>')
@@ -135,7 +150,56 @@ def product(product_id):
             return render_template('404.html'), 404
         image = db_sess.query(ProductImage).filter_by(product_id=product_id).first()
         image_url = url_for('static', filename=f'uploads/{image.filename}') if image else None
-        return render_template('product.html', product=item, image_url=image_url, cart_count=cart_count())
+        reviews = db_sess.query(Review, User).join(User, Review.user_id == User.id)\
+            .filter(Review.product_id == product_id).order_by(Review.created_date.desc()).all()
+        reviews = [{'review': r, 'user': u} for r, u in reviews]
+        avg = round(sum(row['review'].rating for row in reviews) / len(reviews), 1) if reviews else None
+        user_reviewed = current_user.is_authenticated and any(
+            row['review'].user_id == current_user.id for row in reviews)
+        return render_template('product.html', product=item, image_url=image_url,
+                               reviews=reviews, avg=avg, user_reviewed=user_reviewed)
+
+
+@app.route('/product/<int:product_id>/review', methods=['POST'])
+@login_required
+def add_review(product_id):
+    rating = request.form.get('rating', type=int)
+    text = request.form.get('text', '').strip()
+    if not rating or not (1 <= rating <= 5):
+        flash('Укажите оценку от 1 до 5.')
+        return redirect(url_for('product', product_id=product_id))
+    with session_scope() as db_sess:
+        already = db_sess.query(Review).filter_by(product_id=product_id, user_id=current_user.id).first()
+        if already:
+            flash('Вы уже оставили отзыв на этот товар.')
+            return redirect(url_for('product', product_id=product_id))
+        rev = Review(product_id=product_id, user_id=current_user.id, rating=rating, text=text or None)
+        db_sess.add(rev)
+        db_sess.commit()
+    flash('Отзыв добавлен.')
+    return redirect(url_for('product', product_id=product_id))
+
+
+@app.route('/product/<int:product_id>/reviews/data')
+def reviews_data(product_id):
+    with session_scope() as db_sess:
+        rows = db_sess.query(Review, User).join(User, Review.user_id == User.id)\
+            .filter(Review.product_id == product_id).order_by(Review.created_date.asc()).all()
+        data = [{'id': r.id, 'user': u.name, 'user_id': r.user_id,
+                 'rating': r.rating, 'text': r.text or '',
+                 'date': r.created_date.strftime('%d.%m.%Y')} for r, u in rows]
+    return {'reviews': data}
+
+
+@app.route('/product/<int:product_id>/review/delete', methods=['POST'])
+@login_required
+def delete_review(product_id):
+    with session_scope() as db_sess:
+        rev = db_sess.query(Review).filter_by(product_id=product_id, user_id=current_user.id).first()
+        if rev:
+            db_sess.delete(rev)
+            db_sess.commit()
+    return redirect(url_for('product', product_id=product_id))
 
 
 @app.route('/cart')
@@ -157,7 +221,6 @@ def cart():
 @login_required
 def cart_add(product_id):
     with session_scope() as db_sess:
-        # если товар уже в корзине увеличиваем количество, иначе добавляем новую запись
         item = db_sess.query(Cart).filter_by(product_id=product_id, user_id=current_user.id).first()
         if item:
             item.quantity += 1
@@ -194,7 +257,7 @@ def product_delete(product_id):
     if current_user.role not in ['admin', 'manager', 'warehouse']:
         abort(403)
     with session_scope() as db_sess:
-        # сначала удаляем связанные записи чтобы не было ошибок целостности бд
+        # сначала чистим картинки и корзину, иначе будет ошибка внешнего ключа
         db_sess.query(ProductImage).filter_by(product_id=product_id).delete()
         db_sess.query(Cart).filter_by(product_id=product_id).delete()
         product = db_sess.get(Products, product_id)
@@ -229,15 +292,14 @@ def add_product():
         with session_scope() as db_sess:
             if db_sess.query(Products).filter(Products.name == form.name.data).first():
                 flash('Товар с таким названием уже существует.')
-                return render_template('add_product.html', form=form, cart_count=cart_count())
+                return render_template('add_product.html', form=form)
             product = Products(
                 name=form.name.data,
                 price=form.price.data,
                 quantity=form.quantity.data
             )
             db_sess.add(product)
-            # flush нужен чтобы получить product.id до commit и привязать к нему фото
-            db_sess.flush()
+            db_sess.flush()  # нужен id до коммита, чтобы привязать фото
             if form.photo.data and form.photo.data.filename:
                 filename = save_photo(form.photo.data)
                 img = ProductImage(product_id=product.id, filename=filename)
@@ -245,7 +307,7 @@ def add_product():
             db_sess.commit()
             flash(f'Товар «{product.name}» добавлен.')
             return redirect(url_for('catalog'))
-    return render_template('add_product.html', form=form, cart_count=cart_count())
+    return render_template('add_product.html', form=form)
 
 
 @app.route('/checkout', methods=['GET', 'POST'])
@@ -255,10 +317,9 @@ def checkout():
         session.pop('cart', None)
         flash('Заказ оформлен!')
         return redirect(url_for('index'))
-    return render_template('checkout.html', total=0, cart_count=cart_count())
+    return render_template('checkout.html', total=0)
 
 
-# flask-login вызывает это при каждом запросе чтобы загрузить объект пользователя из куки
 @login_manager.user_loader
 def load_user(user_id):
     with session_scope() as db_sess:
@@ -275,29 +336,66 @@ def login():
                 login_user(user, remember=form.remember_me.data)
                 return redirect('/')
             return render_template('login.html', message='Неправильный логин или пароль', form=form)
-    return render_template('login.html', form=form, cart_count=cart_count())
+    return render_template('login.html', form=form)
+
+
+def _render_register(message=None, active_tab='buyer', buyer_form=None, staff_form=None):
+    return render_template('register.html',
+                           buyer_form=buyer_form or RegistrationForm(),
+                           staff_form=staff_form or StaffRegistrationForm(),
+                           message=message,
+                           active_tab=active_tab)
 
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    form = RegistrationForm()
-    if form.validate_on_submit():
+    buyer_form = RegistrationForm()
+    if buyer_form.validate_on_submit():
         with session_scope() as db_sess:
-            if db_sess.query(User).filter(User.email == form.email.data).first():
-                return render_template('register.html', title='Регистрация',
-                                       form=form, message='Такой пользователь уже есть')
-            user = User(
-                name=form.name.data,
-                email=form.email.data,
-                # если передана неизвестная роль назначаем обычного пользователя
-                role=form.role.data if form.role.data in ['user', 'manager', 'warehouse', 'support', 'courier'] else 'user'
-            )
-            user.set_password(form.password.data)
+            if db_sess.query(User).filter(User.email == buyer_form.email.data).first():
+                return _render_register(message='Такой пользователь уже есть', buyer_form=buyer_form)
+            user = User(name=buyer_form.name.data, email=buyer_form.email.data, role='user')
+            user.set_password(buyer_form.password.data)
             db_sess.add(user)
             db_sess.commit()
             login_user(user)
             return redirect(url_for('account'))
-    return render_template('register.html', title='Регистрация', form=form)
+    return _render_register(buyer_form=buyer_form)
+
+
+@app.route('/register/staff', methods=['GET', 'POST'])
+def register_staff():
+    staff_form = StaffRegistrationForm()
+    if staff_form.validate_on_submit():
+        with session_scope() as db_sess:
+            if db_sess.query(User).filter(User.email == staff_form.email.data).first():
+                return _render_register(message='Пользователь с таким email уже существует',
+                                        active_tab='staff', staff_form=staff_form)
+            user = User(name=staff_form.name.data, email=staff_form.email.data, role=staff_form.role.data)
+            user.set_password(staff_form.password.data)
+            db_sess.add(user)
+            db_sess.flush()
+            emp = Employee(
+                user_id=user.id,
+                position=dict(staff_form.role.choices)[staff_form.role.data],
+                employee_code=staff_form.code.data,
+            )
+            db_sess.add(emp)
+            db_sess.commit()
+            login_user(user)
+            return redirect(url_for('account'))
+    return _render_register(active_tab='staff', staff_form=staff_form)
+
+
+@app.route('/staff')
+@login_required
+def staff_list():
+    if current_user.role not in ['admin', 'manager']:
+        abort(403)
+    with session_scope() as db_sess:
+        employees = db_sess.query(Employee, User).join(User, Employee.user_id == User.id).all()
+        staff = [{'emp': e, 'user': u} for e, u in employees]
+    return render_template('staff_list.html', staff=staff)
 
 
 @app.route('/logout')
@@ -310,17 +408,45 @@ def logout():
 @app.route('/account')
 @login_required
 def account():
-    return render_template('account.html', user=current_user, cart_count=cart_count())
+    return render_template('account.html', user=current_user)
 
 
-@app.route('/stores')
+@app.route('/stores', methods=['GET', 'POST'])
 def stores():
-    shops = [
-        {'name': 'МойМагазин Центральный', 'address': 'Москва, ул. Тверская, 1',      'lat': 55.758400, 'lng': 37.612151},
-        {'name': 'МойМагазин Север',       'address': 'Москва, Ленинградский пр., 80', 'lat': 55.803118, 'lng': 37.530887},
-        {'name': 'МойМагазин Юг',          'address': 'Москва, Варшавское ш., 129',    'lat': 55.645300, 'lng': 37.621564},
-    ]
-    return render_template('stores.html', shops=shops, cart_count=cart_count())
+    form = StoreForm()
+    is_staff = current_user.is_authenticated and current_user.role in ['admin', 'manager', 'warehouse']
+    if form.validate_on_submit():
+        if not is_staff:
+            abort(403)
+        with session_scope() as db_sess:
+            store = Store(
+                name=form.name.data,
+                address=form.address.data,
+                lat=form.lat.data,
+                lng=form.lng.data,
+            )
+            db_sess.add(store)
+            db_sess.commit()
+            flash(f'Магазин «{store.name}» добавлен.')
+        return redirect(url_for('stores'))
+    with session_scope() as db_sess:
+        shops = db_sess.query(Store).all()
+        shops = [{'id': s.id, 'name': s.name, 'address': s.address, 'lat': s.lat, 'lng': s.lng} for s in shops]
+    return render_template('stores.html', shops=shops, form=form, is_staff=is_staff)
+
+
+@app.route('/stores/delete/<int:store_id>', methods=['POST'])
+@login_required
+def store_delete(store_id):
+    if current_user.role not in ['admin', 'manager', 'warehouse']:
+        abort(403)
+    with session_scope() as db_sess:
+        store = db_sess.get(Store, store_id)
+        if store:
+            db_sess.delete(store)
+            db_sess.commit()
+            flash(f'Магазин «{store.name}» удалён.')
+    return redirect(url_for('stores'))
 
 
 @app.errorhandler(404)
@@ -329,4 +455,4 @@ def not_found(e):
 
 
 if __name__ == '__main__':
-    serve(app, host='127.0.0.1', port=8000)
+    serve(app, host='127.0.0.1', port=5700)

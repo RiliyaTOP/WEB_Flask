@@ -20,6 +20,10 @@
                     <li><a href="{{ url_for('cart') }}" class="nav-link text-dark"><i class="bi bi-cart3"></i> Корзина</a></li>
                     {% if user.role in ["admin", "manager", "warehouse"] %}
                     <li><a href="{{ url_for('add_product') }}" class="nav-link text-dark"><i class="bi bi-plus-circle"></i> Добавить товар</a></li>
+                    <li><a href="{{ url_for('stores') }}" class="nav-link text-dark"><i class="bi bi-shop"></i> Управление магазинами</a></li>
+                    {% endif %}
+                    {% if user.role == "admin" %}
+                    <li><a href="{{ url_for('staff_list') }}" class="nav-link text-dark"><i class="bi bi-people"></i> Сотрудники</a></li>
                     {% endif %}
                     <li><a href="{{ url_for('logout') }}" class="nav-link text-danger"><i class="bi bi-box-arrow-right"></i> Выйти</a></li>
                 </ul>

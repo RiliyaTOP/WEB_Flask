@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Регистрация сотрудника — Магазин{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white">
+                <i class="bi bi-person-badge"></i> Регистрация сотрудника
+            </div>
+            <div class="card-body p-4">
+
+                {% if message %}
+                <div class="alert alert-danger">{{ message }}</div>
+                {% endif %}
+
+                <form method="post">
+                    {{ form.hidden_tag() }}
+
+                    <div class="mb-3">
+                        {{ form.name.label(class="form-label") }}
+                        {{ form.name(class="form-control") }}
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.email.label(class="form-label") }}
+                        {{ form.email(class="form-control") }}
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.password.label(class="form-label") }}
+                        {{ form.password(class="form-control") }}
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.role.label(class="form-label") }}
+                        {{ form.role(class="form-select") }}
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.department.label(class="form-label") }}
+                        {{ form.department(class="form-control", placeholder="Например: Склад, Продажи") }}
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.phone.label(class="form-label") }}
+                        {{ form.phone(class="form-control", placeholder="+7 (999) 000-00-00") }}
+                    </div>
+
+                    {{ form.submit(class="btn btn-dark w-100") }}
+                </form>
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

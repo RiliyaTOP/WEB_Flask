@@ -47,6 +47,16 @@
                 <h6 class="card-title">
                     <a href="{{ url_for('product', product_id=p.id) }}" class="text-decoration-none text-dark">{{ p.name }}</a>
                 </h6>
+                <div class="mb-1">
+                    {% if ratings.get(p.id) %}
+                        {% for i in range(1, 6) %}
+                        <i class="bi bi-star{% if i <= ratings[p.id]|int %}-fill{% endif %} text-warning small"></i>
+                        {% endfor %}
+                        <span class="text-muted small">{{ ratings[p.id] }}</span>
+                    {% else %}
+                        <span class="text-muted small">Нет оценок</span>
+                    {% endif %}
+                </div>
                 <p class="fw-bold mb-1">{{ p.price }} ₽</p>
                 <p class="text-muted small mb-3">В наличии: {{ p.quantity }} шт.</p>
                 <div class="mt-auto d-grid gap-2">
@@ -67,6 +77,11 @@
                     {% else %}
                     <a href="{{ url_for('login') }}" class="btn btn-outline-dark">Войдите чтобы купить</a>
                     {% endif %}
+                    <button class="btn btn-outline-secondary btn-sm"
+                            onclick="openReviews({{ p.id }}, '{{ p.name|e }}')">
+                        <i class="bi bi-chat-left-text"></i> Отзывы
+                        {% if ratings.get(p.id) %}<span class="badge bg-secondary ms-1">{{ ratings[p.id] }} ★</span>{% endif %}
+                    </button>
                 </div>
             </div>
         </div>
@@ -79,4 +94,140 @@
     <p class="mt-2">Товары не найдены.</p>
 </div>
 {% endif %}
+
+<!-- Модальное окно отзывов -->
+<div class="modal fade" id="reviewsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title"><i class="bi bi-chat-left-text me-2"></i><span id="modal-product-name"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body d-flex flex-column" style="height:480px;">
+                <!-- чат -->
+                <div id="chat-box" class="flex-grow-1 overflow-auto mb-3 d-flex flex-column gap-2 px-1">
+                    <div class="text-center text-muted small" id="chat-empty">Отзывов пока нет</div>
+                </div>
+                <!-- форма -->
+                {% if current_user.is_authenticated %}
+                <div id="review-form-block">
+                    <div class="d-flex gap-1 mb-2" id="star-row">
+                        {% for i in range(1,6) %}
+                        <i class="bi bi-star fs-4 text-warning star-pick" data-val="{{ i }}" style="cursor:pointer;"></i>
+                        {% endfor %}
+                    </div>
+                    <div class="d-flex gap-2">
+                        <textarea id="review-text" class="form-control" rows="2" placeholder="Напишите отзыв..."></textarea>
+                        <button class="btn btn-dark px-3" onclick="submitReview()">
+                            <i class="bi bi-send"></i>
+                        </button>
+                    </div>
+                    <div id="review-error" class="text-danger small mt-1"></div>
+                </div>
+                {% else %}
+                <div class="text-center text-muted small">
+                    <a href="{{ url_for('login') }}">Войдите</a>, чтобы оставить отзыв
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentProductId = null;
+let selectedRating = 0;
+const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }};
+
+function openReviews(productId, productName) {
+    currentProductId = productId;
+    selectedRating = 0;
+    document.getElementById('modal-product-name').textContent = productName;
+    document.querySelectorAll('.star-pick').forEach(s => {
+        s.classList.remove('bi-star-fill'); s.classList.add('bi-star');
+    });
+    if (document.getElementById('review-text')) document.getElementById('review-text').value = '';
+    if (document.getElementById('review-error')) document.getElementById('review-error').textContent = '';
+    loadReviews();
+    new bootstrap.Modal(document.getElementById('reviewsModal')).show();
+}
+
+async function loadReviews() {
+    const box = document.getElementById('chat-box');
+    const res = await fetch(`/product/${currentProductId}/reviews/data`);
+    const data = await res.json();
+    const reviews = data.reviews;
+
+    box.innerHTML = '';
+    if (!reviews.length) {
+        box.innerHTML = '<div class="text-center text-muted small" id="chat-empty">Отзывов пока нет</div>';
+        return;
+    }
+
+    const myReviewExists = reviews.some(r => r.user_id === currentUserId);
+    if (document.getElementById('review-form-block')) {
+        document.getElementById('review-form-block').style.display = myReviewExists ? 'none' : 'block';
+    }
+
+    reviews.forEach(r => {
+        const isMe = r.user_id === currentUserId;
+        const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
+        const bubble = document.createElement('div');
+        bubble.className = `d-flex flex-column ${isMe ? 'align-items-end' : 'align-items-start'}`;
+        bubble.innerHTML = `
+            <div class="small text-muted mb-1">${isMe ? 'Вы' : r.user} · ${r.date}</div>
+            <div class="px-3 py-2 rounded-4 shadow-sm" style="max-width:75%;background:${isMe ? '#212529' : '#f0f0f0'};color:${isMe ? '#fff' : '#000'};">
+                <div class="text-warning small mb-1">${stars}</div>
+                ${r.text ? `<div>${r.text}</div>` : ''}
+            </div>
+            ${isMe ? `<form method="post" action="/product/${currentProductId}/review/delete" class="mt-1">
+                <input type="hidden" name="csrf_token" value="${getCsrf()}">
+                <button class="btn btn-link btn-sm text-danger p-0" style="font-size:0.75rem;">Удалить</button>
+            </form>` : ''}
+        `;
+        box.appendChild(bubble);
+    });
+    box.scrollTop = box.scrollHeight;
+}
+
+async function submitReview() {
+    const err = document.getElementById('review-error');
+    if (!selectedRating) { err.textContent = 'Выберите оценку'; return; }
+    const text = document.getElementById('review-text').value.trim();
+    const form = new FormData();
+    form.append('rating', selectedRating);
+    form.append('text', text);
+    form.append('csrf_token', getCsrf());
+    const res = await fetch(`/product/${currentProductId}/review`, {method: 'POST', body: form});
+    if (res.redirected || res.ok) { loadReviews(); }
+}
+
+function getCsrf() {
+    const el = document.querySelector('input[name="csrf_token"]');
+    return el ? el.value : '';
+}
+
+document.querySelectorAll('.star-pick').forEach(star => {
+    star.addEventListener('click', () => {
+        selectedRating = +star.dataset.val;
+        document.querySelectorAll('.star-pick').forEach((s, i) => {
+            s.classList.toggle('bi-star-fill', i < selectedRating);
+            s.classList.toggle('bi-star', i >= selectedRating);
+        });
+    });
+    star.addEventListener('mouseover', () => {
+        const val = +star.dataset.val;
+        document.querySelectorAll('.star-pick').forEach((s, i) => {
+            s.classList.toggle('bi-star-fill', i < val);
+            s.classList.toggle('bi-star', i >= val);
+        });
+    });
+    star.addEventListener('mouseout', () => {
+        document.querySelectorAll('.star-pick').forEach((s, i) => {
+            s.classList.toggle('bi-star-fill', i < selectedRating);
+            s.classList.toggle('bi-star', i >= selectedRating);
+        });
+    });
+});
+</script>
 {% endblock %}

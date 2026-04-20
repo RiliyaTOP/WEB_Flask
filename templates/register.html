@@ -6,71 +6,107 @@
     <div class="col-md-6">
         <div class="card shadow-sm">
             <div class="card-body p-4">
-                <h2 class="card-title mb-4">Регистрация</h2>
+                <h2 class="card-title mb-3">Регистрация</h2>
 
                 {% if message %}
                 <div class="alert alert-danger">{{ message }}</div>
                 {% endif %}
 
-                <form method="post" id="register-form">
-                    {{ form.hidden_tag() }}
+                <!-- Переключатель -->
+                <ul class="nav nav-tabs mb-4">
+                    <li class="nav-item">
+                        <button class="nav-link active" id="tab-buyer" onclick="switchTab('buyer')">
+                            <i class="bi bi-person"></i> Покупатель
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" id="tab-staff" onclick="switchTab('staff')">
+                            <i class="bi bi-person-badge"></i> Сотрудник
+                        </button>
+                    </li>
+                </ul>
 
+                <!-- Форма покупателя -->
+                <form method="post" action="{{ url_for('register') }}" id="form-buyer">
+                    {{ buyer_form.hidden_tag() }}
                     <div class="mb-3">
-                        {{ form.name.label(class="form-label") }}
-                        {{ form.name(class="form-control") }}
+                        {{ buyer_form.name.label(class="form-label") }}
+                        {{ buyer_form.name(class="form-control") }}
                     </div>
-
                     <div class="mb-3">
-                        {{ form.email.label(class="form-label") }}
-                        {{ form.email(class="form-control", id="reg-email") }}
+                        {{ buyer_form.email.label(class="form-label") }}
+                        {{ buyer_form.email(class="form-control", id="buyer-email") }}
                     </div>
-
                     <div class="mb-3">
-                        {{ form.password.label(class="form-label") }}
-                        {{ form.password(class="form-control") }}
+                        {{ buyer_form.password.label(class="form-label") }}
+                        {{ buyer_form.password(class="form-control") }}
                     </div>
-
-                    <!-- OTP блок -->
                     <div class="mb-3">
-                        <button type="button" class="btn btn-outline-dark w-100"
-                                onclick="sendCode()">
+                        <button type="button" class="btn btn-outline-dark w-100" onclick="sendCode('buyer-email')">
                             Отправить код подтверждения
                         </button>
                     </div>
-
                     <div class="mb-3">
-                        <input type="text" name="code" class="form-control"
-                               placeholder="Код из email">
+                        <input type="text" name="code" class="form-control" placeholder="Код из email">
                     </div>
-
-                    <button type="submit" class="btn btn-dark w-100">
-                        Зарегистрироваться
-                    </button>
+                    <button type="submit" class="btn btn-dark w-100">Зарегистрироваться</button>
                 </form>
 
+                <!-- Форма сотрудника -->
+                <form method="post" action="{{ url_for('register_staff') }}" id="form-staff" style="display:none;">
+                    {{ staff_form.hidden_tag() }}
+                    <div class="mb-3">
+                        {{ staff_form.name.label(class="form-label") }}
+                        {{ staff_form.name(class="form-control") }}
+                    </div>
+                    <div class="mb-3">
+                        {{ staff_form.email.label(class="form-label") }}
+                        {{ staff_form.email(class="form-control") }}
+                    </div>
+                    <div class="mb-3">
+                        {{ staff_form.password.label(class="form-label") }}
+                        {{ staff_form.password(class="form-control") }}
+                    </div>
+                    <div class="mb-3">
+                        {{ staff_form.role.label(class="form-label") }}
+                        {{ staff_form.role(class="form-select") }}
+                    </div>
+                    <div class="mb-3">
+                        {{ staff_form.code.label(class="form-label") }}
+                        {{ staff_form.code(class="form-control", placeholder="Введите код сотрудника") }}
+                    </div>
+                    <button type="submit" class="btn btn-dark w-100">Зарегистрироваться как сотрудник</button>
+                </form>
+
+                <p class="text-center mt-3 mb-0 small text-muted">
+                    Уже есть аккаунт? <a href="{{ url_for('login') }}">Войти</a>
+                </p>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-async function sendCode() {
-    const email = document.getElementById("reg-email").value;
+function switchTab(tab) {
+    document.getElementById('form-buyer').style.display = tab === 'buyer' ? 'block' : 'none';
+    document.getElementById('form-staff').style.display = tab === 'staff' ? 'block' : 'none';
+    document.getElementById('tab-buyer').classList.toggle('active', tab === 'buyer');
+    document.getElementById('tab-staff').classList.toggle('active', tab === 'staff');
+}
 
+async function sendCode(inputId) {
+    const email = document.getElementById(inputId).value;
     const res = await fetch("/auth/request-code", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({email})
     });
-
-    if (res.ok) {
-        alert("Код отправлен");
-    } else {
-        alert("Ошибка или слишком часто");
-    }
+    alert(res.ok ? "Код отправлен" : "Ошибка или слишком часто");
 }
 
-// можно использовать код как проверку ДО регистрации (опционально)
+// если пришли с ошибкой сотрудника — показать вкладку сотрудника
+{% if active_tab == 'staff' %}
+switchTab('staff');
+{% endif %}
 </script>
-
 {% endblock %}

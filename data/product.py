@@ -11,5 +11,4 @@ class Products(SqlAlchemyBase, UserMixin):
     name = Column(String, nullable=True, unique=True)
     price = Column(Integer, nullable=True)
     quantity = Column(Integer, nullable=True)
-    #category = Column(Enum("admin", "user", "manager", "warehouse", "support", "courier", name="user_roles"), nullable=True)
     created_date = Column(DateTime, default=datetime.datetime.now)

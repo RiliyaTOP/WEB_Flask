@@ -23,6 +23,18 @@
 
     <div class="col-md-7">
         <h1 class="h2 mb-2">{{ product.name }}</h1>
+
+        <div class="mb-2">
+            {% if avg %}
+                {% for i in range(1, 6) %}
+                    <i class="bi bi-star{% if i <= avg|int %}-fill{% elif i - avg < 1 %}-half{% endif %} text-warning"></i>
+                {% endfor %}
+                <span class="text-muted ms-1">{{ avg }} / 5 &nbsp;({{ reviews|length }} отзывов)</span>
+            {% else %}
+                <span class="text-muted small">Нет оценок</span>
+            {% endif %}
+        </div>
+
         <p class="text-muted mb-2">В наличии: {{ product.quantity }} шт.</p>
         <p class="fs-3 fw-bold mb-3">{{ product.price }} ₽</p>
 
@@ -37,4 +49,97 @@
         {% endif %}
     </div>
 </div>
+
+<!-- Отзывы -->
+<div class="mt-5" id="reviews">
+    <h4 class="mb-3">Отзывы</h4>
+
+    {% if current_user.is_authenticated and not user_reviewed %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-dark text-white">Оставить отзыв</div>
+        <div class="card-body">
+            <form method="post" action="{{ url_for('add_review', product_id=product.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label class="form-label">Оценка</label>
+                    <div class="d-flex gap-2" id="star-picker">
+                        {% for i in range(1, 6) %}
+                        <i class="bi bi-star fs-3 text-warning star-btn" data-val="{{ i }}" style="cursor:pointer;"></i>
+                        {% endfor %}
+                    </div>
+                    <input type="hidden" name="rating" id="rating-input">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Комментарий <span class="text-muted small">(необязательно)</span></label>
+                    <textarea name="text" class="form-control" rows="3" placeholder="Поделитесь впечатлениями..."></textarea>
+                </div>
+                <button type="submit" class="btn btn-dark">Отправить</button>
+            </form>
+        </div>
+    </div>
+    {% elif current_user.is_authenticated and user_reviewed %}
+    <div class="alert alert-secondary d-flex justify-content-between align-items-center">
+        <span>Вы уже оставили отзыв на этот товар.</span>
+        <form method="post" action="{{ url_for('delete_review', product_id=product.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-outline-danger">Удалить мой отзыв</button>
+        </form>
+    </div>
+    {% endif %}
+
+    {% if reviews %}
+    <div class="d-flex flex-column gap-3">
+        {% for row in reviews %}
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <strong>{{ row.user.name }}</strong>
+                    <span class="text-muted small">{{ row.review.created_date.strftime('%d.%m.%Y') }}</span>
+                </div>
+                <div class="mb-2">
+                    {% for i in range(1, 6) %}
+                    <i class="bi bi-star{% if i <= row.review.rating %}-fill{% endif %} text-warning"></i>
+                    {% endfor %}
+                </div>
+                {% if row.review.text %}
+                <p class="mb-0">{{ row.review.text }}</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted">Отзывов пока нет. Будьте первым!</p>
+    {% endif %}
+</div>
+
+<script>
+const stars = document.querySelectorAll('.star-btn');
+const input = document.getElementById('rating-input');
+
+stars.forEach(star => {
+    star.addEventListener('click', () => {
+        const val = +star.dataset.val;
+        input.value = val;
+        stars.forEach((s, i) => {
+            s.classList.toggle('bi-star-fill', i < val);
+            s.classList.toggle('bi-star', i >= val);
+        });
+    });
+    star.addEventListener('mouseover', () => {
+        const val = +star.dataset.val;
+        stars.forEach((s, i) => {
+            s.classList.toggle('bi-star-fill', i < val);
+            s.classList.toggle('bi-star', i >= val);
+        });
+    });
+    star.addEventListener('mouseout', () => {
+        const val = +(input.value || 0);
+        stars.forEach((s, i) => {
+            s.classList.toggle('bi-star-fill', i < val);
+            s.classList.toggle('bi-star', i >= val);
+        });
+    });
+});
+</script>
 {% endblock %}
