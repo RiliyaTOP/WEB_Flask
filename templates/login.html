@@ -14,13 +14,13 @@
 
                 <ul class="nav nav-tabs mb-3">
                     <li class="nav-item">
-                        <button class="nav-link active" id="tab-password" onclick="switchMode('password')">
-                            <i class="bi bi-person-badge"></i> Сотрудник
+                        <button class="nav-link active" id="tab-buyer" onclick="switchTab('buyer')">
+                            <i class="bi bi-envelope"></i> Покупатель (OTP)
                         </button>
                     </li>
                     <li class="nav-item">
-                        <button class="nav-link" id="tab-otp" onclick="switchMode('otp')">
-                            <i class="bi bi-envelope"></i> Покупатель (OTP)
+                        <button class="nav-link" id="tab-staff" onclick="switchTab('staff')">
+                            <i class="bi bi-person-badge"></i> Сотрудник
                         </button>
                     </li>
                 </ul>
@@ -33,28 +33,86 @@
                         {{ form.email(class="form-control", id="email") }}
                     </div>
 
-                    <div id="password-block">
-                        <div class="mb-3">
-                            {{ form.password.label(class="form-label") }}
-                            {{ form.password(class="form-control") }}
-                        </div>
-                        <div class="mb-3">
-                            {{ form.remember_me() }} {{ form.remember_me.label }}
-                        </div>
-                    </div>
-
-                    <div id="otp-block" style="display:none;">
-                        <div class="mb-2">
-                            <button type="button" class="btn btn-outline-dark w-100" onclick="sendCode()">
-                                Получить код на email
+                    <!-- Таб сотрудника: пароль (основной) -->
+                    <div id="staff-tab" style="display:none;">
+                        <div id="staff-password-mode">
+                            <div class="mb-3">
+                                {{ form.password.label(class="form-label") }}
+                                {{ form.password(class="form-control") }}
+                            </div>
+                            <div class="mb-3">
+                                {{ form.remember_me() }} {{ form.remember_me.label }}
+                            </div>
+                            <button type="submit" class="btn btn-dark w-100 mb-3">Войти</button>
+                            <div class="text-center">
+                                <span class="text-muted small">или</span>
+                            </div>
+                            <button type="button" class="btn btn-outline-secondary w-100 mt-2"
+                                    onclick="showStaffOtp()">
+                                <i class="bi bi-envelope"></i> Войти через код на почту
                             </button>
                         </div>
-                        <div class="mb-3">
-                            <input type="text" name="code" class="form-control" placeholder="Введите код из email">
+
+                        <!-- Дополнительный способ: OTP для сотрудника -->
+                        <div id="staff-otp-mode" style="display:none;">
+                            <div class="mb-2">
+                                <button type="button" class="btn btn-outline-dark w-100"
+                                        onclick="sendCode()">
+                                    Получить код на email
+                                </button>
+                            </div>
+                            <div class="mb-3">
+                                <input type="text" id="staff-otp-code" class="form-control"
+                                       placeholder="Введите код из email">
+                            </div>
+                            <button type="button" class="btn btn-dark w-100 mb-2"
+                                    onclick="verifyStaffOtp()">Войти по коду</button>
+                            <div class="text-center">
+                                <a href="#" class="small text-muted" onclick="showStaffPassword(); return false;">
+                                    ← Войти с паролем
+                                </a>
+                            </div>
                         </div>
                     </div>
 
-                    <button type="submit" class="btn btn-dark w-100">Войти</button>
+                    <!-- Таб покупателя: OTP (основной) или пароль (дополнительный) -->
+                    <div id="buyer-tab">
+                        <div id="buyer-otp-mode">
+                            <div class="mb-2">
+                                <button type="button" class="btn btn-outline-dark w-100" onclick="sendCode()">
+                                    Получить код на email
+                                </button>
+                            </div>
+                            <div class="mb-3">
+                                <input type="text" id="buyer-otp-code" class="form-control"
+                                       placeholder="Введите код из email">
+                            </div>
+                            <button type="button" class="btn btn-dark w-100 mb-3" onclick="verifyBuyerOtp()">Войти</button>
+                            <div class="text-center">
+                                <span class="text-muted small">или</span>
+                            </div>
+                            <button type="button" class="btn btn-outline-secondary w-100 mt-2"
+                                    onclick="showBuyerPassword()">
+                                <i class="bi bi-lock"></i> Войти с паролем
+                            </button>
+                        </div>
+
+                        <div id="buyer-password-mode" style="display:none;">
+                            <div class="mb-3">
+                                {{ form.password.label(class="form-label") }}
+                                {{ form.password(class="form-control", id="buyer-password") }}
+                            </div>
+                            <div class="mb-3">
+                                {{ form.remember_me() }} {{ form.remember_me.label }}
+                            </div>
+                            <button type="submit" class="btn btn-dark w-100 mb-2">Войти</button>
+                            <div class="text-center">
+                                <a href="#" class="small text-muted" onclick="showBuyerOtp(); return false;">
+                                    ← Войти по коду на почту
+                                </a>
+                            </div>
+                        </div>
+                    </div>
                 </form>
 
                 <p class="text-center mt-3 mb-0 small">
@@ -66,18 +124,45 @@
 </div>
 
 <script>
-let mode = "password";
+let tab = "buyer";       // staff | buyer
+let staffMode = "password";  // password | otp
+let buyerMode = "otp";       // otp | password
 
-function switchMode(m) {
-    mode = m;
-    document.getElementById("password-block").style.display = m === "password" ? "block" : "none";
-    document.getElementById("otp-block").style.display = m === "otp" ? "block" : "none";
-    document.getElementById("tab-password").classList.toggle("active", m === "password");
-    document.getElementById("tab-otp").classList.toggle("active", m === "otp");
+function switchTab(t) {
+    tab = t;
+    document.getElementById("staff-tab").style.display = t === "staff" ? "block" : "none";
+    document.getElementById("buyer-tab").style.display = t === "buyer" ? "block" : "none";
+    document.getElementById("tab-staff").classList.toggle("active", t === "staff");
+    document.getElementById("tab-buyer").classList.toggle("active", t === "buyer");
+}
+
+function showStaffOtp() {
+    staffMode = "otp";
+    document.getElementById("staff-password-mode").style.display = "none";
+    document.getElementById("staff-otp-mode").style.display = "block";
+}
+
+function showStaffPassword() {
+    staffMode = "password";
+    document.getElementById("staff-password-mode").style.display = "block";
+    document.getElementById("staff-otp-mode").style.display = "none";
+}
+
+function showBuyerOtp() {
+    buyerMode = "otp";
+    document.getElementById("buyer-otp-mode").style.display = "block";
+    document.getElementById("buyer-password-mode").style.display = "none";
+}
+
+function showBuyerPassword() {
+    buyerMode = "password";
+    document.getElementById("buyer-otp-mode").style.display = "none";
+    document.getElementById("buyer-password-mode").style.display = "block";
 }
 
 async function sendCode() {
     const email = document.getElementById("email").value;
+    if (!email) { alert("Введите email"); return; }
     const res = await fetch("/auth/request-code", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
@@ -86,22 +171,30 @@ async function sendCode() {
     alert(res.ok ? "Код отправлен на email" : "Ошибка или слишком частый запрос");
 }
 
+async function verifyOtp(codeInputId) {
+    const email = document.getElementById("email").value;
+    const code = document.getElementById(codeInputId).value;
+    const res = await fetch("/auth/verify", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({email, code})
+    });
+    const data = await res.json();
+    if (data.status === "logged_in") window.location.href = "/";
+    else alert(data.error || "Ошибка входа");
+}
+
+function verifyStaffOtp() { verifyOtp("staff-otp-code"); }
+function verifyBuyerOtp() { verifyOtp("buyer-otp-code"); }
+
+// Форма submit нужен только при входе по паролю (обычный POST)
+// При OTP-режимах кнопки вызывают verifyOtp напрямую и не submit формы
 document.getElementById("login-form").addEventListener("submit", function(e) {
-    if (mode === "otp") {
-        e.preventDefault();
-        const email = document.getElementById("email").value;
-        const code = document.querySelector('input[name="code"]').value;
-        fetch("/auth/verify", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({email, code})
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.status === "logged_in") window.location.href = "/";
-            else alert(data.error || "Ошибка входа");
-        });
+    if (tab === "buyer" && buyerMode === "otp") {
+        e.preventDefault(); // на случай если форма сабмитнулась случайно
     }
+    // tab=staff+staffMode=password → обычный POST
+    // tab=buyer+buyerMode=password → обычный POST
 });
 </script>
 {% endblock %}

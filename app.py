@@ -5,6 +5,7 @@ from datetime import timedelta
 from data import db_session
 from data.cart import Cart
 from data.users import User
+from data.wishlist import Wishlist
 from data.product import Products
 from data.product_image import ProductImage
 from form.users import LoginForm, RegistrationForm, StaffRegistrationForm
@@ -22,6 +23,8 @@ import os
 import uuid
 
 
+# используем contextmanager чтобы сессия бд точно закрывалась после каждого запроса,
+# даже если внутри произошла ошибка — без этого соединения копились бы и падали
 @contextmanager
 def session_scope():
     db_sess = db_session.create_session()
@@ -33,10 +36,13 @@ def session_scope():
 
 app = Flask(__name__)
 app.secret_key = 'dev-secret-key'
+# сессия живёт 7 дней — чтобы пользователь не разлогинивался каждый день
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
+# папка для загружаемых фото товаров, путь строим относительно текущего файла
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
 
+# настройки почты берём из переменных окружения, чтобы не хранить пароли в коде
 app.config.update(
     MAIL_SERVER=os.getenv("MAIL_SERVER"),
     MAIL_PORT=os.getenv("MAIL_PORT"),
@@ -50,6 +56,8 @@ mail = Mail(app)
 
 
 def save_photo(file):
+    # генерируем уникальное имя через uuid, чтобы два файла с одинаковым именем
+    # не перезаписали друг друга в папке uploads
     ext = file.filename.rsplit('.', 1)[-1].lower()
     filename = f"{uuid.uuid4().hex}.{ext}"
     file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
@@ -59,12 +67,14 @@ def save_photo(file):
 login_manager = LoginManager()
 login_manager.init_app(app)
 
+# инициализируем бд — создаёт файл и все таблицы если их ещё нет
 db_session.global_init("db/blogs.sqlite")
 
 CATEGORIES = ['Электроника', 'Одежда', 'Книги']
 
 
 def cart_count():
+    # незалогиненным незачем считать корзину
     if not current_user.is_authenticated:
         return 0
     with session_scope() as db_sess:
@@ -72,15 +82,19 @@ def cart_count():
         return sum(item.quantity for item in items)
 
 
+# context_processor автоматически добавляет cart_count во все шаблоны,
+# не нужно передавать его вручную в каждом render_template
 @app.context_processor
 def inject_cart_count():
     return dict(cart_count=cart_count())
 
 
+# endpoint для отправки OTP-кода на почту покупателя
 @app.route('/auth/request-code', methods=['POST'])
 def request_code():
     email = request.json['email']
 
+    # проверяем rate limit — не даём спамить запросами кодов
     if check_rate(email):
         return {"error": "too_many_requests"}, 429
 
@@ -91,6 +105,7 @@ def request_code():
     return {"status": "sent"}
 
 
+# проверяем введённый OTP-код и если всё ок — логиним пользователя
 @app.route('/auth/verify', methods=['POST'])
 def verify():
     email = request.json['email']
@@ -98,6 +113,7 @@ def verify():
 
     result = verify_otp(email, code)
 
+    # каждая ошибка своя — фронт показывает разные сообщения
     if result == "expired":
         return {"error": "expired"}, 400
     if result == "blocked":
@@ -116,6 +132,7 @@ def verify():
 
 @app.route('/')
 def index():
+    # featured пока пустой, потом можно добавить акционные товары
     return render_template('index.html', featured=[])
 
 
@@ -125,13 +142,15 @@ def catalog():
     selected_category = request.args.get('category', '')
     with session_scope() as db_sess:
         query = db_sess.query(Products)
+        # фильтруем по поисковому запросу если он есть
         if q:
             query = query.filter(Products.name.ilike(f'%{q}%'))
         products = query.all()
-        # картинки собираем заранее, чтобы не делать запрос на каждый товар
+        # картинки собираем одним запросом заранее, чтобы не делать n запросов на каждый товар
         images = {img.product_id: url_for('static', filename=f'uploads/{img.filename}')
                   for img in db_sess.query(ProductImage).all()}
         all_reviews = db_sess.query(Review).all()
+    # считаем средний рейтинг для каждого товара и округляем до одного знака
     ratings = {}
     for rev in all_reviews:
         ratings.setdefault(rev.product_id, []).append(rev.rating)
@@ -146,14 +165,17 @@ def catalog():
 def product(product_id):
     with session_scope() as db_sess:
         item = db_sess.get(Products, product_id)
+        # если товара нет — показываем 404 а не крашимся
         if item is None:
             return render_template('404.html'), 404
         image = db_sess.query(ProductImage).filter_by(product_id=product_id).first()
         image_url = url_for('static', filename=f'uploads/{image.filename}') if image else None
+        # джойним с пользователями чтобы сразу получить имя автора отзыва
         reviews = db_sess.query(Review, User).join(User, Review.user_id == User.id)\
             .filter(Review.product_id == product_id).order_by(Review.created_date.desc()).all()
         reviews = [{'review': r, 'user': u} for r, u in reviews]
         avg = round(sum(row['review'].rating for row in reviews) / len(reviews), 1) if reviews else None
+        # проверяем оставлял ли текущий пользователь отзыв — чтобы не показывать форму дважды
         user_reviewed = current_user.is_authenticated and any(
             row['review'].user_id == current_user.id for row in reviews)
         return render_template('product.html', product=item, image_url=image_url,
@@ -165,10 +187,12 @@ def product(product_id):
 def add_review(product_id):
     rating = request.form.get('rating', type=int)
     text = request.form.get('text', '').strip()
+    # валидируем рейтинг на сервере, мало ли фронт обошли
     if not rating or not (1 <= rating <= 5):
         flash('Укажите оценку от 1 до 5.')
         return redirect(url_for('product', product_id=product_id))
     with session_scope() as db_sess:
+        # один пользователь — один отзыв на товар, иначе легко накрутить рейтинг
         already = db_sess.query(Review).filter_by(product_id=product_id, user_id=current_user.id).first()
         if already:
             flash('Вы уже оставили отзыв на этот товар.')
@@ -180,6 +204,7 @@ def add_review(product_id):
     return redirect(url_for('product', product_id=product_id))
 
 
+# отдаём отзывы в json — используется модалкой в каталоге без перезагрузки страницы
 @app.route('/product/<int:product_id>/reviews/data')
 def reviews_data(product_id):
     with session_scope() as db_sess:
@@ -195,6 +220,7 @@ def reviews_data(product_id):
 @login_required
 def delete_review(product_id):
     with session_scope() as db_sess:
+        # ищем только отзыв текущего пользователя — нельзя удалить чужой
         rev = db_sess.query(Review).filter_by(product_id=product_id, user_id=current_user.id).first()
         if rev:
             db_sess.delete(rev)
@@ -221,6 +247,7 @@ def cart():
 @login_required
 def cart_add(product_id):
     with session_scope() as db_sess:
+        # если товар уже в корзине — просто увеличиваем количество
         item = db_sess.query(Cart).filter_by(product_id=product_id, user_id=current_user.id).first()
         if item:
             item.quantity += 1
@@ -228,6 +255,7 @@ def cart_add(product_id):
             item = Cart(user_id=current_user.id, product_id=product_id, quantity=1)
             db_sess.add(item)
         db_sess.commit()
+    # возвращаем на ту же страницу откуда добавляли, а не на каталог
     return redirect(request.referrer or url_for('catalog'))
 
 
@@ -257,7 +285,7 @@ def product_delete(product_id):
     if current_user.role not in ['admin', 'manager', 'warehouse']:
         abort(403)
     with session_scope() as db_sess:
-        # сначала чистим картинки и корзину, иначе будет ошибка внешнего ключа
+        # удаляем связанные записи перед товаром, иначе sqlite выдаст ошибку внешнего ключа
         db_sess.query(ProductImage).filter_by(product_id=product_id).delete()
         db_sess.query(Cart).filter_by(product_id=product_id).delete()
         product = db_sess.get(Products, product_id)
@@ -290,6 +318,7 @@ def add_product():
     form = NewProductsForm()
     if form.validate_on_submit():
         with session_scope() as db_sess:
+            # проверяем уникальность названия до сохранения
             if db_sess.query(Products).filter(Products.name == form.name.data).first():
                 flash('Товар с таким названием уже существует.')
                 return render_template('add_product.html', form=form)
@@ -299,7 +328,8 @@ def add_product():
                 quantity=form.quantity.data
             )
             db_sess.add(product)
-            db_sess.flush()  # нужен id до коммита, чтобы привязать фото
+            # flush даёт нам product.id до коммита — нужен чтобы привязать фото
+            db_sess.flush()
             if form.photo.data and form.photo.data.filename:
                 filename = save_photo(form.photo.data)
                 img = ProductImage(product_id=product.id, filename=filename)
@@ -314,12 +344,14 @@ def add_product():
 @login_required
 def checkout():
     if request.method == 'POST':
+        # очищаем корзину из сессии и показываем подтверждение
         session.pop('cart', None)
         flash('Заказ оформлен!')
         return redirect(url_for('index'))
     return render_template('checkout.html', total=0)
 
 
+# flask-login вызывает это при каждом запросе чтобы восстановить объект пользователя из куки
 @login_manager.user_loader
 def load_user(user_id):
     with session_scope() as db_sess:
@@ -335,10 +367,13 @@ def login():
             if user and user.check_password(form.password.data):
                 login_user(user, remember=form.remember_me.data)
                 return redirect('/')
+            # не говорим что именно неверно — логин или пароль, так безопаснее
             return render_template('login.html', message='Неправильный логин или пароль', form=form)
     return render_template('login.html', form=form)
 
 
+# вспомогательная функция — рендерит страницу регистрации с обеими формами сразу,
+# нужна чтобы не дублировать код в register и register_staff
 def _render_register(message=None, active_tab='buyer', buyer_form=None, staff_form=None):
     return render_template('register.html',
                            buyer_form=buyer_form or RegistrationForm(),
@@ -354,6 +389,7 @@ def register():
         with session_scope() as db_sess:
             if db_sess.query(User).filter(User.email == buyer_form.email.data).first():
                 return _render_register(message='Такой пользователь уже есть', buyer_form=buyer_form)
+            # покупатель всегда получает роль user, даже если передать что-то другое
             user = User(name=buyer_form.name.data, email=buyer_form.email.data, role='user')
             user.set_password(buyer_form.password.data)
             db_sess.add(user)
@@ -374,6 +410,7 @@ def register_staff():
             user = User(name=staff_form.name.data, email=staff_form.email.data, role=staff_form.role.data)
             user.set_password(staff_form.password.data)
             db_sess.add(user)
+            # flush нужен чтобы получить user.id для записи в таблицу employees
             db_sess.flush()
             emp = Employee(
                 user_id=user.id,
@@ -393,6 +430,7 @@ def staff_list():
     if current_user.role not in ['admin', 'manager']:
         abort(403)
     with session_scope() as db_sess:
+        # джойним employees и users чтобы получить всё за один запрос
         employees = db_sess.query(Employee, User).join(User, Employee.user_id == User.id).all()
         staff = [{'emp': e, 'user': u} for e, u in employees]
     return render_template('staff_list.html', staff=staff)
@@ -416,12 +454,14 @@ def stores():
     form = StoreForm()
     is_staff = current_user.is_authenticated and current_user.role in ['admin', 'manager', 'warehouse']
     if form.validate_on_submit():
+        # дополнительная проверка на случай если кто-то отправит запрос напрямую
         if not is_staff:
             abort(403)
         with session_scope() as db_sess:
             store = Store(
                 name=form.name.data,
                 address=form.address.data,
+                # координаты приходят уже заполненными — их определяет геокодер на фронте
                 lat=form.lat.data,
                 lng=form.lng.data,
             )
@@ -431,6 +471,7 @@ def stores():
         return redirect(url_for('stores'))
     with session_scope() as db_sess:
         shops = db_sess.query(Store).all()
+        # преобразуем объекты в словари — sqlalchemy объекты нельзя использовать после закрытия сессии
         shops = [{'id': s.id, 'name': s.name, 'address': s.address, 'lat': s.lat, 'lng': s.lng} for s in shops]
     return render_template('stores.html', shops=shops, form=form, is_staff=is_staff)
 
@@ -447,6 +488,74 @@ def store_delete(store_id):
             db_sess.commit()
             flash(f'Магазин «{store.name}» удалён.')
     return redirect(url_for('stores'))
+
+
+@app.route('/wishlist')
+@login_required
+def wishlist():
+    with session_scope() as db_sess:
+        items = db_sess.query(Wishlist).filter_by(user_id=current_user.id).all()
+        product_ids = [w.product_id for w in items]
+        products = db_sess.query(Products).filter(Products.id.in_(product_ids)).all() if product_ids else []
+        images = {img.product_id: url_for('static', filename=f'uploads/{img.filename}')
+                  for img in db_sess.query(ProductImage).filter(ProductImage.product_id.in_(product_ids)).all()} if product_ids else {}
+        all_reviews = db_sess.query(Review).filter(Review.product_id.in_(product_ids)).all() if product_ids else []
+    ratings = {}
+    for rev in all_reviews:
+        ratings.setdefault(rev.product_id, []).append(rev.rating)
+    ratings = {pid: round(sum(vals) / len(vals), 1) for pid, vals in ratings.items()}
+    return render_template('wishlist.html', products=products, images=images, ratings=ratings)
+
+
+@app.route('/wishlist/ids')
+@login_required
+def wishlist_ids():
+    with session_scope() as db_sess:
+        items = db_sess.query(Wishlist).filter_by(user_id=current_user.id).all()
+        return {'ids': [w.product_id for w in items]}
+
+
+@app.route('/wishlist/toggle/<int:product_id>', methods=['POST'])
+@login_required
+def wishlist_toggle(product_id):
+    with session_scope() as db_sess:
+        entry = db_sess.query(Wishlist).filter_by(user_id=current_user.id, product_id=product_id).first()
+        if entry:
+            db_sess.delete(entry)
+            db_sess.commit()
+            return {'in_wishlist': False}
+        db_sess.add(Wishlist(user_id=current_user.id, product_id=product_id))
+        db_sess.commit()
+        return {'in_wishlist': True}
+
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    if current_user.role not in ['admin', 'manager', 'warehouse', 'support', 'courier']:
+        abort(403)
+    with session_scope() as db_sess:
+        total_products = db_sess.query(Products).count()
+        total_users = db_sess.query(User).filter(User.role == 'user').count()
+        total_reviews = db_sess.query(Review).count()
+        total_staff = db_sess.query(Employee).count()
+        low_stock = db_sess.query(Products).filter(Products.quantity < 5).order_by(Products.quantity).all()
+        all_reviews = db_sess.query(Review).all()
+        ratings = {}
+        for rev in all_reviews:
+            ratings.setdefault(rev.product_id, []).append(rev.rating)
+        avg_ratings = {pid: round(sum(vals) / len(vals), 1) for pid, vals in ratings.items()}
+        top_product_ids = sorted(avg_ratings, key=lambda pid: avg_ratings[pid], reverse=True)[:5]
+        top_rated = []
+        for pid in top_product_ids:
+            p = db_sess.get(Products, pid)
+            img = db_sess.query(ProductImage).filter_by(product_id=pid).first()
+            image_url = url_for('static', filename=f'uploads/{img.filename}') if img else None
+            top_rated.append({'product': p, 'rating': avg_ratings[pid], 'image': image_url})
+    return render_template('dashboard.html',
+                           total_products=total_products, total_users=total_users,
+                           total_reviews=total_reviews, total_staff=total_staff,
+                           low_stock=low_stock, top_rated=top_rated)
 
 
 @app.errorhandler(404)

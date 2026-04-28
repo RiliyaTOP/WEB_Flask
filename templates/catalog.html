@@ -61,11 +61,19 @@
                 <p class="text-muted small mb-3">В наличии: {{ p.quantity }} шт.</p>
                 <div class="mt-auto d-grid gap-2">
                     {% if current_user.is_authenticated %}
-                    <form method="post" action="{{ url_for('cart_add', product_id=p.id) }}">
-                        <button type="submit" class="btn btn-dark w-100">
-                            <i class="bi bi-cart-plus"></i> В корзину
+                    <div class="d-flex gap-2">
+                        <form method="post" action="{{ url_for('cart_add', product_id=p.id) }}" class="flex-grow-1">
+                            <button type="submit" class="btn btn-dark w-100">
+                                <i class="bi bi-cart-plus"></i> В корзину
+                            </button>
+                        </form>
+                        {% if current_user.role == 'user' %}
+                        <button class="btn btn-outline-danger wish-btn" data-id="{{ p.id }}"
+                                onclick="toggleWish({{ p.id }}, this)" title="В избранное">
+                            <i class="bi bi-heart"></i>
                         </button>
-                    </form>
+                        {% endif %}
+                    </div>
                     {% if is_staff %}
                     <form method="post" action="{{ url_for('product_delete', product_id=p.id) }}"
                           onsubmit="return confirm('Удалить товар «{{ p.name }}»?');">
@@ -205,6 +213,32 @@ async function submitReview() {
 function getCsrf() {
     const el = document.querySelector('input[name="csrf_token"]');
     return el ? el.value : '';
+}
+
+// избранное
+{% if current_user.is_authenticated and current_user.role == 'user' %}
+fetch('/wishlist/ids').then(r => r.json()).then(data => {
+    data.ids.forEach(id => {
+        const btn = document.querySelector(`.wish-btn[data-id="${id}"]`);
+        if (btn) {
+            btn.classList.add('active');
+            btn.querySelector('i').classList.replace('bi-heart', 'bi-heart-fill');
+        }
+    });
+});
+{% endif %}
+
+async function toggleWish(productId, btn) {
+    const res = await fetch(`/wishlist/toggle/${productId}`, {method: 'POST'});
+    const data = await res.json();
+    const icon = btn.querySelector('i');
+    if (data.in_wishlist) {
+        btn.classList.add('active');
+        icon.classList.replace('bi-heart', 'bi-heart-fill');
+    } else {
+        btn.classList.remove('active');
+        icon.classList.replace('bi-heart-fill', 'bi-heart');
+    }
 }
 
 document.querySelectorAll('.star-pick').forEach(star => {

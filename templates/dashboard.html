@@ -1,0 +1,137 @@
+{% extends 'base.html' %}
+{% block title %}Дашборд — Магазин{% endblock %}
+
+{% block content %}
+<h1 class="h3 mb-4"><i class="bi bi-speedometer2 me-2"></i>Дашборд</h1>
+
+<!-- Статистика -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card text-center shadow-sm border-0 bg-dark text-white h-100">
+            <div class="card-body">
+                <i class="bi bi-box-seam fs-2"></i>
+                <h3 class="mt-2 mb-0">{{ total_products }}</h3>
+                <p class="small mb-0 text-secondary">Товаров</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-center shadow-sm border-0 bg-dark text-white h-100">
+            <div class="card-body">
+                <i class="bi bi-people fs-2"></i>
+                <h3 class="mt-2 mb-0">{{ total_users }}</h3>
+                <p class="small mb-0 text-secondary">Покупателей</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-center shadow-sm border-0 bg-dark text-white h-100">
+            <div class="card-body">
+                <i class="bi bi-chat-left-text fs-2"></i>
+                <h3 class="mt-2 mb-0">{{ total_reviews }}</h3>
+                <p class="small mb-0 text-secondary">Отзывов</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-center shadow-sm border-0 bg-dark text-white h-100">
+            <div class="card-body">
+                <i class="bi bi-person-badge fs-2"></i>
+                <h3 class="mt-2 mb-0">{{ total_staff }}</h3>
+                <p class="small mb-0 text-secondary">Сотрудников</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Топ товаров по рейтингу -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-dark text-white">
+                <i class="bi bi-star-fill text-warning me-1"></i> Топ товаров по рейтингу
+            </div>
+            <div class="card-body p-0">
+                {% if top_rated %}
+                <ul class="list-group list-group-flush">
+                    {% for item in top_rated %}
+                    <li class="list-group-item d-flex align-items-center gap-3">
+                        <div style="width:48px;height:48px;flex-shrink:0;overflow:hidden;border-radius:8px;background:#f0f0f0;">
+                            {% if item.image %}
+                            <img src="{{ item.image }}" style="width:100%;height:100%;object-fit:cover;">
+                            {% else %}
+                            <div class="d-flex align-items-center justify-content-center h-100 text-secondary">
+                                <i class="bi bi-image"></i>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="flex-grow-1">
+                            <a href="{{ url_for('product', product_id=item.product.id) }}"
+                               class="text-decoration-none text-dark fw-semibold">{{ item.product.name }}</a>
+                            <div class="text-warning small">
+                                {% for i in range(1, 6) %}
+                                <i class="bi bi-star{% if i <= item.rating|int %}-fill{% endif %}"></i>
+                                {% endfor %}
+                                <span class="text-muted ms-1">{{ item.rating }}</span>
+                            </div>
+                        </div>
+                        <span class="text-muted small">{{ item.product.price }} ₽</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="text-center text-muted py-4">Нет отзывов</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Товары с низким остатком -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-dark text-white">
+                <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i> Мало на складе (менее 5 шт.)
+            </div>
+            <div class="card-body p-0">
+                {% if low_stock %}
+                <ul class="list-group list-group-flush">
+                    {% for p in low_stock %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <a href="{{ url_for('product', product_id=p.id) }}"
+                           class="text-decoration-none text-dark">{{ p.name }}</a>
+                        <span class="badge {% if p.quantity == 0 %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                            {{ p.quantity }} шт.
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-check-circle text-success fs-3"></i>
+                    <p class="mt-2 mb-0">Всё в порядке</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Быстрые действия -->
+<div class="mt-4">
+    <h5 class="mb-3">Быстрые действия</h5>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{{ url_for('add_product') }}" class="btn btn-dark">
+            <i class="bi bi-plus-lg me-1"></i> Добавить товар
+        </a>
+        <a href="{{ url_for('catalog') }}" class="btn btn-outline-dark">
+            <i class="bi bi-grid me-1"></i> Каталог
+        </a>
+        <a href="{{ url_for('staff_list') }}" class="btn btn-outline-dark">
+            <i class="bi bi-people me-1"></i> Сотрудники
+        </a>
+        <a href="{{ url_for('stores') }}" class="btn btn-outline-dark">
+            <i class="bi bi-shop me-1"></i> Магазины
+        </a>
+    </div>
+</div>
+{% endblock %}

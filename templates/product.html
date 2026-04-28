@@ -39,11 +39,18 @@
         <p class="fs-3 fw-bold mb-3">{{ product.price }} ₽</p>
 
         {% if current_user.is_authenticated %}
-        <form method="post" action="{{ url_for('cart_add', product_id=product.id) }}">
-            <button type="submit" class="btn btn-dark btn-lg">
-                <i class="bi bi-cart-plus"></i> Добавить в корзину
+        <div class="d-flex gap-2 align-items-center">
+            <form method="post" action="{{ url_for('cart_add', product_id=product.id) }}">
+                <button type="submit" class="btn btn-dark btn-lg">
+                    <i class="bi bi-cart-plus"></i> Добавить в корзину
+                </button>
+            </form>
+            {% if current_user.role == 'user' %}
+            <button id="wish-btn" class="btn btn-outline-danger btn-lg" onclick="toggleWish()" title="В избранное">
+                <i class="bi bi-heart" id="wish-icon"></i>
             </button>
-        </form>
+            {% endif %}
+        </div>
         {% else %}
         <a href="{{ url_for('login') }}" class="btn btn-dark btn-lg">Войдите чтобы купить</a>
         {% endif %}
@@ -114,6 +121,27 @@
 </div>
 
 <script>
+{% if current_user.is_authenticated and current_user.role == 'user' %}
+const productId = {{ product.id }};
+
+fetch('/wishlist/ids').then(r => r.json()).then(data => {
+    if (data.ids.includes(productId)) setWishActive(true);
+});
+
+async function toggleWish() {
+    const res = await fetch(`/wishlist/toggle/${productId}`, {method: 'POST'});
+    const data = await res.json();
+    setWishActive(data.in_wishlist);
+}
+
+function setWishActive(active) {
+    const icon = document.getElementById('wish-icon');
+    const btn = document.getElementById('wish-btn');
+    icon.className = active ? 'bi bi-heart-fill' : 'bi bi-heart';
+    btn.classList.toggle('active', active);
+}
+{% endif %}
+
 const stars = document.querySelectorAll('.star-btn');
 const input = document.getElementById('rating-input');
 
