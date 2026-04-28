@@ -49,7 +49,8 @@ app.config.update(
     MAIL_USE_TLS = False,
     MAIL_USE_SSL = False,
     MAIL_USERNAME = None,
-    MAIL_PASSWORD = None
+    MAIL_PASSWORD = None,
+    MAIL_DEFAULT_SENDER = "noreply@mpit.su"
 )
 
 mail = Mail(app)
@@ -93,21 +94,47 @@ def inject_cart_count():
 @app.route('/auth/request-code', methods=['POST'])
 def request_code():
     try:
-        email = request.json['email']
+        print("REQUEST RECEIVED")
+
+        data = request.get_json()
+
+        print("DATA:", data)
+
+        if not data or 'email' not in data:
+            return {"error": "Email required"}, 400
+
+        email = data['email']
+
+        print("EMAIL:", email)
+
+        # проверка лимита
+        if check_rate(email):
+            print("RATE LIMITED")
+
+            return {
+                "error": "Слишком много попыток"
+            }, 429
 
         code = create_otp(email)
 
-        print("OTP:", code)
+        print("OTP CREATED:", code)
 
         send_otp_email(mail, email, code)
+
+        print("EMAIL SENT")
+
+        set_rate(email)
 
         return {"status": "sent"}
 
     except Exception as e:
         import traceback
+
         traceback.print_exc()
 
-        return {"error": str(e)}, 500
+        return {
+            "error": str(e)
+        }, 500
 
 
 # проверяем введённый OTP-код и если всё ок — логиним пользователя
