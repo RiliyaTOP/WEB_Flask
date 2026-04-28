@@ -92,14 +92,22 @@ def inject_cart_count():
 # endpoint для отправки OTP-кода на почту покупателя
 @app.route('/auth/request-code', methods=['POST'])
 def request_code():
-    email = request.json['email']
+    try:
+        email = request.json['email']
 
+        code = create_otp(email)
 
-    code = create_otp(email)
-    send_otp_email(mail, email, code)
-    set_rate(email)
+        print("OTP:", code)
 
-    return {"status": "sent"}
+        send_otp_email(mail, email, code)
+
+        return {"status": "sent"}
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+
+        return {"error": str(e)}, 500
 
 
 # проверяем введённый OTP-код и если всё ок — логиним пользователя
