@@ -94,9 +94,6 @@ def inject_cart_count():
 def request_code():
     email = request.json['email']
 
-    # проверяем rate limit — не даём спамить запросами кодов
-    if check_rate(email):
-        return {"error": "too_many_requests"}, 429
 
     code = create_otp(email)
     send_otp_email(mail, email, code)
@@ -113,18 +110,30 @@ def verify():
 
     result = verify_otp(email, code)
 
-    # каждая ошибка своя — фронт показывает разные сообщения
     if result == "expired":
-        return {"error": "expired"}, 400
+        return {
+            "error": "Срок действия кода истёк"
+        }, 400
+
     if result == "blocked":
-        return {"error": "too_many_attempts"}, 429
+        return {
+            "error": "Вы превысили количество попыток ввода OTP. Попробуйте позже."
+        }, 429
+
     if result == "invalid":
-        return {"error": "invalid"}, 400
+        return {
+            "error": "Неверный OTP-код"
+        }, 400
+
 
     with session_scope() as db_sess:
         user = db_sess.query(User).filter(User.email == email).first()
+
         if not user:
-            return {"error": "user not found"}, 404
+            return {
+                "error": "Пользователь не найден"
+            }, 404
+
         login_user(user, remember=True)
 
     return {"status": "logged_in"}
