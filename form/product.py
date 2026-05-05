@@ -1,7 +1,7 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed
 from wtforms import (EmailField, SelectField, PasswordField, StringField, BooleanField, SubmitField, IntegerField,
-                     HiddenField, RadioField)
+                     HiddenField, RadioField, TextAreaField)
 from wtforms.validators import DataRequired, Optional
 
 
@@ -9,9 +9,20 @@ class NewProductsForm(FlaskForm):
     name = StringField('Название', validators=[DataRequired()])
     price = IntegerField("Цена", validators=[DataRequired()])
     quantity = IntegerField("Количество", validators=[DataRequired()])
+    description = TextAreaField('Описание', validators=[Optional()])
     photo = FileField('Фото товара', validators=[FileAllowed(['jpg', 'jpeg', 'png', 'webp'], 'Только изображения')])
 
     submit = SubmitField('Разместить продукт')
+
+
+class EditProductForm(FlaskForm):
+    name = StringField('Название', validators=[DataRequired()])
+    price = IntegerField("Цена", validators=[DataRequired()])
+    quantity = IntegerField("Количество", validators=[DataRequired()])
+    description = TextAreaField('Описание', validators=[Optional()])
+    photo = FileField('Новое фото', validators=[FileAllowed(['jpg', 'jpeg', 'png', 'webp'], 'Только изображения')])
+
+    submit = SubmitField('Сохранить')
 
 class Supply(FlaskForm):
     mode = RadioField(

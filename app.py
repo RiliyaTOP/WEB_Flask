@@ -1,6 +1,7 @@
 from flask import Flask, render_template, redirect, url_for, request, session, flash, abort
 from flask_login import LoginManager, login_user, logout_user, current_user, login_required
 from flask_mail import Mail
+from flask_wtf.csrf import CSRFProtect
 from datetime import timedelta
 from data import db_session
 from data.cart import Cart
@@ -10,7 +11,7 @@ from data.product import Products
 from data.product_image import ProductImage
 from form.users import LoginForm, RegistrationForm, StaffRegistrationForm
 from data.employee import Employee
-from form.product import NewProductsForm, Supply
+from form.product import NewProductsForm, Supply, EditProductForm
 from form.store import StoreForm
 from data.store import Store
 from data.review import Review
@@ -54,6 +55,7 @@ app.config.update(
 )
 
 mail = Mail(app)
+csrf = CSRFProtect(app)
 
 
 def save_photo(file):
@@ -205,25 +207,53 @@ def catalog():
                            categories=CATEGORIES, selected_category=selected_category)
 
 
+@app.route('/product/<int:product_id>/data')
+def product_data_api(product_id):
+    with session_scope() as db_sess:
+        item = db_sess.get(Products, product_id)
+        if item is None:
+            return {'error': 'not found'}, 404
+        image = db_sess.query(ProductImage).filter_by(product_id=product_id).first()
+        image_url = url_for('static', filename=f'uploads/{image.filename}') if image else None
+        rows = db_sess.query(Review, User).join(User, Review.user_id == User.id)\
+            .filter(Review.product_id == product_id).order_by(Review.created_date.desc()).all()
+        reviews = [{'rating': r.rating, 'text': r.text or '', 'user_id': r.user_id,
+                    'user_name': u.name, 'date': r.created_date.strftime('%d.%m.%Y')} for r, u in rows]
+        avg = round(sum(r['rating'] for r in reviews) / len(reviews), 1) if reviews else None
+        is_staff = current_user.is_authenticated and current_user.role in ['admin', 'manager', 'warehouse']
+        user_reviewed = current_user.is_authenticated and any(r['user_id'] == current_user.id for r in reviews)
+        return {
+            'id': item.id, 'name': item.name, 'price': item.price,
+            'quantity': item.quantity, 'description': item.description or '',
+            'image_url': image_url, 'avg': avg, 'reviews': reviews,
+            'is_staff': is_staff, 'user_reviewed': user_reviewed,
+        }
+
+
 @app.route('/product/<int:product_id>')
 def product(product_id):
     with session_scope() as db_sess:
         item = db_sess.get(Products, product_id)
-        # если товара нет — показываем 404 а не крашимся
         if item is None:
             return render_template('404.html'), 404
+        # сразу сохраняем все поля в словарь, пока сессия открыта
+        product_data = {
+            'id': item.id, 'name': item.name, 'price': item.price,
+            'quantity': item.quantity, 'description': item.description,
+        }
         image = db_sess.query(ProductImage).filter_by(product_id=product_id).first()
         image_url = url_for('static', filename=f'uploads/{image.filename}') if image else None
-        # джойним с пользователями чтобы сразу получить имя автора отзыва
-        reviews = db_sess.query(Review, User).join(User, Review.user_id == User.id)\
+        rows = db_sess.query(Review, User).join(User, Review.user_id == User.id)\
             .filter(Review.product_id == product_id).order_by(Review.created_date.desc()).all()
-        reviews = [{'review': r, 'user': u} for r, u in reviews]
-        avg = round(sum(row['review'].rating for row in reviews) / len(reviews), 1) if reviews else None
-        # проверяем оставлял ли текущий пользователь отзыв — чтобы не показывать форму дважды
+        # конвертируем в словари до закрытия сессии
+        reviews = [{'rating': r.rating, 'text': r.text, 'user_id': r.user_id,
+                    'user_name': u.name, 'date': r.created_date.strftime('%d.%m.%Y')} for r, u in rows]
+        avg = round(sum(r['rating'] for r in reviews) / len(reviews), 1) if reviews else None
         user_reviewed = current_user.is_authenticated and any(
-            row['review'].user_id == current_user.id for row in reviews)
-        return render_template('product.html', product=item, image_url=image_url,
-                               reviews=reviews, avg=avg, user_reviewed=user_reviewed)
+            r['user_id'] == current_user.id for r in reviews)
+        is_staff = current_user.is_authenticated and current_user.role in ['admin', 'manager', 'warehouse']
+    return render_template('product.html', product=product_data, image_url=image_url,
+                           reviews=reviews, avg=avg, user_reviewed=user_reviewed, is_staff=is_staff)
 
 
 @app.route('/product/<int:product_id>/review', methods=['POST'])
@@ -369,7 +399,8 @@ def add_product():
             product = Products(
                 name=form.name.data,
                 price=form.price.data,
-                quantity=form.quantity.data
+                quantity=form.quantity.data,
+                description=form.description.data or None
             )
             db_sess.add(product)
             # flush даёт нам product.id до коммита — нужен чтобы привязать фото
@@ -382,6 +413,43 @@ def add_product():
             flash(f'Товар «{product.name}» добавлен.')
             return redirect(url_for('catalog'))
     return render_template('add_product.html', form=form)
+
+
+@app.route('/product/edit/<int:product_id>', methods=['GET', 'POST'])
+@login_required
+def product_edit(product_id):
+    if current_user.role not in ['admin', 'manager', 'warehouse']:
+        abort(403)
+    with session_scope() as db_sess:
+        product = db_sess.get(Products, product_id)
+        if product is None:
+            return render_template('404.html'), 404
+        form = EditProductForm(obj=product)
+        if form.validate_on_submit():
+            existing = db_sess.query(Products).filter(
+                Products.name == form.name.data, Products.id != product_id).first()
+            if existing:
+                flash('Товар с таким названием уже существует.')
+                return render_template('edit_product.html', form=form, product=product)
+            product.name = form.name.data
+            product.price = form.price.data
+            product.quantity = form.quantity.data
+            product.description = form.description.data or None
+            if form.photo.data and form.photo.data.filename:
+                old = db_sess.query(ProductImage).filter_by(product_id=product_id).first()
+                if old:
+                    old_path = os.path.join(app.config['UPLOAD_FOLDER'], old.filename)
+                    if os.path.exists(old_path):
+                        os.remove(old_path)
+                    db_sess.delete(old)
+                filename = save_photo(form.photo.data)
+                db_sess.add(ProductImage(product_id=product_id, filename=filename))
+            db_sess.commit()
+            flash(f'Товар «{product.name}» обновлён.')
+            return redirect(url_for('product', product_id=product_id))
+        image = db_sess.query(ProductImage).filter_by(product_id=product_id).first()
+        image_url = url_for('static', filename=f'uploads/{image.filename}') if image else None
+        return render_template('edit_product.html', form=form, product=product, image_url=image_url)
 
 
 @app.route('/checkout', methods=['GET', 'POST'])

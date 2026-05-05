@@ -30,6 +30,10 @@
                         <div class="text-danger small">{{ error }}</div>
                         {% endfor %}
                     </div>
+                    <div class="mb-3">
+                        {{ form.description.label(class="form-label") }}
+                        {{ form.description(class="form-control", rows=4, placeholder="Опишите товар...") }}
+                    </div>
                     <div class="mb-4">
                         {{ form.photo.label(class="form-label") }}
                         {{ form.photo(class="form-control") }}

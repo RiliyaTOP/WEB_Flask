@@ -1,6 +1,6 @@
 import datetime
 from flask_login import UserMixin
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum, create_engine
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum, Text, create_engine
 from .db_session import SqlAlchemyBase
 
 
@@ -11,4 +11,5 @@ class Products(SqlAlchemyBase, UserMixin):
     name = Column(String, nullable=True, unique=True)
     price = Column(Integer, nullable=True)
     quantity = Column(Integer, nullable=True)
+    description = Column(Text, nullable=True)
     created_date = Column(DateTime, default=datetime.datetime.now)

@@ -36,7 +36,7 @@
     {% for p in products %}
     <div class="col">
         <div class="card h-100 shadow-sm">
-            <div class="product-img">
+            <div class="product-img" style="cursor:pointer;" onclick="openProduct({{ p.id }})">
                 {% if images and p.id in images %}
                 <img src="{{ images[p.id] }}" alt="{{ p.name }}">
                 {% else %}
@@ -45,7 +45,7 @@
             </div>
             <div class="card-body d-flex flex-column">
                 <h6 class="card-title">
-                    <a href="{{ url_for('product', product_id=p.id) }}" class="text-decoration-none text-dark">{{ p.name }}</a>
+                    <a href="#" class="text-decoration-none text-dark" onclick="openProduct({{ p.id }}); return false;">{{ p.name }}</a>
                 </h6>
                 <div class="mb-1">
                     {% if ratings.get(p.id) %}
@@ -63,6 +63,7 @@
                     {% if current_user.is_authenticated %}
                     <div class="d-flex gap-2">
                         <form method="post" action="{{ url_for('cart_add', product_id=p.id) }}" class="flex-grow-1">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-dark w-100">
                                 <i class="bi bi-cart-plus"></i> В корзину
                             </button>
@@ -77,6 +78,7 @@
                     {% if is_staff %}
                     <form method="post" action="{{ url_for('product_delete', product_id=p.id) }}"
                           onsubmit="return confirm('Удалить товар «{{ p.name }}»?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn btn-outline-danger w-100 btn-sm">
                             <i class="bi bi-trash"></i> Удалить
                         </button>
@@ -85,11 +87,6 @@
                     {% else %}
                     <a href="{{ url_for('login') }}" class="btn btn-outline-dark">Войдите чтобы купить</a>
                     {% endif %}
-                    <button class="btn btn-outline-secondary btn-sm"
-                            onclick="openReviews({{ p.id }}, '{{ p.name|e }}')">
-                        <i class="bi bi-chat-left-text"></i> Отзывы
-                        {% if ratings.get(p.id) %}<span class="badge bg-secondary ms-1">{{ ratings[p.id] }} ★</span>{% endif %}
-                    </button>
                 </div>
             </div>
         </div>
@@ -103,119 +100,211 @@
 </div>
 {% endif %}
 
-<!-- Модальное окно отзывов -->
-<div class="modal fade" id="reviewsModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+<!-- Большое модальное окно карточки товара -->
+<div class="modal fade" id="productModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header bg-dark text-white">
-                <h5 class="modal-title"><i class="bi bi-chat-left-text me-2"></i><span id="modal-product-name"></span></h5>
+                <h5 class="modal-title fw-bold" id="pm-name"></h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body d-flex flex-column" style="height:480px;">
-                <!-- чат -->
-                <div id="chat-box" class="flex-grow-1 overflow-auto mb-3 d-flex flex-column gap-2 px-1">
-                    <div class="text-center text-muted small" id="chat-empty">Отзывов пока нет</div>
-                </div>
-                <!-- форма -->
-                {% if current_user.is_authenticated %}
-                <div id="review-form-block">
-                    <div class="d-flex gap-1 mb-2" id="star-row">
-                        {% for i in range(1,6) %}
-                        <i class="bi bi-star fs-4 text-warning star-pick" data-val="{{ i }}" style="cursor:pointer;"></i>
-                        {% endfor %}
+            <div class="modal-body p-0">
+                <div class="row g-0">
+                    <!-- Левая часть: фото -->
+                    <div class="col-md-5 d-flex align-items-center justify-content-center bg-light" style="min-height:320px;">
+                        <img id="pm-img" src="" alt="" style="max-height:400px;max-width:100%;object-fit:contain;display:none;">
+                        <i id="pm-no-img" class="bi bi-image fs-1 text-secondary" style="display:none;"></i>
                     </div>
-                    <div class="d-flex gap-2">
-                        <textarea id="review-text" class="form-control" rows="2" placeholder="Напишите отзыв..."></textarea>
-                        <button class="btn btn-dark px-3" onclick="submitReview()">
-                            <i class="bi bi-send"></i>
-                        </button>
+                    <!-- Правая часть: инфо -->
+                    <div class="col-md-7 p-4 d-flex flex-column">
+                        <div id="pm-stars" class="mb-2"></div>
+                        <p class="text-muted mb-1">В наличии: <span id="pm-qty"></span> шт.</p>
+                        <p class="fs-3 fw-bold mb-2" id="pm-price"></p>
+                        <p class="text-secondary mb-3" id="pm-desc" style="white-space:pre-line;"></p>
+                        <div class="d-flex gap-2 flex-wrap mt-auto">
+                            <div id="pm-actions"></div>
+                        </div>
                     </div>
-                    <div id="review-error" class="text-danger small mt-1"></div>
                 </div>
-                {% else %}
-                <div class="text-center text-muted small">
-                    <a href="{{ url_for('login') }}">Войдите</a>, чтобы оставить отзыв
+
+                <!-- Отзывы -->
+                <div class="border-top p-4">
+                    <h6 class="fw-bold mb-3"><i class="bi bi-chat-left-text me-2"></i>Отзывы</h6>
+                    <div id="pm-reviews-list" class="d-flex flex-column gap-2 mb-3" style="max-height:260px;overflow-y:auto;"></div>
+                    <div id="pm-review-form"></div>
                 </div>
-                {% endif %}
             </div>
         </div>
     </div>
 </div>
 
 <script>
+const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }};
+const isAuth = {{ 'true' if current_user.is_authenticated else 'false' }};
+const userRole = '{{ current_user.role if current_user.is_authenticated else "" }}';
 let currentProductId = null;
 let selectedRating = 0;
-const currentUserId = {{ current_user.id if current_user.is_authenticated else 'null' }};
-
-function openReviews(productId, productName) {
-    currentProductId = productId;
-    selectedRating = 0;
-    document.getElementById('modal-product-name').textContent = productName;
-    document.querySelectorAll('.star-pick').forEach(s => {
-        s.classList.remove('bi-star-fill'); s.classList.add('bi-star');
-    });
-    if (document.getElementById('review-text')) document.getElementById('review-text').value = '';
-    if (document.getElementById('review-error')) document.getElementById('review-error').textContent = '';
-    loadReviews();
-    new bootstrap.Modal(document.getElementById('reviewsModal')).show();
-}
-
-async function loadReviews() {
-    const box = document.getElementById('chat-box');
-    const res = await fetch(`/product/${currentProductId}/reviews/data`);
-    const data = await res.json();
-    const reviews = data.reviews;
-
-    box.innerHTML = '';
-    if (!reviews.length) {
-        box.innerHTML = '<div class="text-center text-muted small" id="chat-empty">Отзывов пока нет</div>';
-        return;
-    }
-
-    const myReviewExists = reviews.some(r => r.user_id === currentUserId);
-    if (document.getElementById('review-form-block')) {
-        document.getElementById('review-form-block').style.display = myReviewExists ? 'none' : 'block';
-    }
-
-    reviews.forEach(r => {
-        const isMe = r.user_id === currentUserId;
-        const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
-        const bubble = document.createElement('div');
-        bubble.className = `d-flex flex-column ${isMe ? 'align-items-end' : 'align-items-start'}`;
-        bubble.innerHTML = `
-            <div class="small text-muted mb-1">${isMe ? 'Вы' : r.user} · ${r.date}</div>
-            <div class="px-3 py-2 rounded-4 shadow-sm" style="max-width:75%;background:${isMe ? '#212529' : '#f0f0f0'};color:${isMe ? '#fff' : '#000'};">
-                <div class="text-warning small mb-1">${stars}</div>
-                ${r.text ? `<div>${r.text}</div>` : ''}
-            </div>
-            ${isMe ? `<form method="post" action="/product/${currentProductId}/review/delete" class="mt-1">
-                <input type="hidden" name="csrf_token" value="${getCsrf()}">
-                <button class="btn btn-link btn-sm text-danger p-0" style="font-size:0.75rem;">Удалить</button>
-            </form>` : ''}
-        `;
-        box.appendChild(bubble);
-    });
-    box.scrollTop = box.scrollHeight;
-}
-
-async function submitReview() {
-    const err = document.getElementById('review-error');
-    if (!selectedRating) { err.textContent = 'Выберите оценку'; return; }
-    const text = document.getElementById('review-text').value.trim();
-    const form = new FormData();
-    form.append('rating', selectedRating);
-    form.append('text', text);
-    form.append('csrf_token', getCsrf());
-    const res = await fetch(`/product/${currentProductId}/review`, {method: 'POST', body: form});
-    if (res.redirected || res.ok) { loadReviews(); }
-}
+let productModal = null;
 
 function getCsrf() {
     const el = document.querySelector('input[name="csrf_token"]');
     return el ? el.value : '';
 }
 
-// избранное
+async function openProduct(productId) {
+    currentProductId = productId;
+    selectedRating = 0;
+
+    // Сбрасываем содержимое
+    document.getElementById('pm-name').textContent = '...';
+    document.getElementById('pm-img').style.display = 'none';
+    document.getElementById('pm-no-img').style.display = 'none';
+    document.getElementById('pm-stars').innerHTML = '';
+    document.getElementById('pm-qty').textContent = '';
+    document.getElementById('pm-price').textContent = '';
+    document.getElementById('pm-desc').textContent = '';
+    document.getElementById('pm-actions').innerHTML = '';
+    document.getElementById('pm-reviews-list').innerHTML = '<div class="text-muted small">Загрузка...</div>';
+    document.getElementById('pm-review-form').innerHTML = '';
+
+    if (!productModal) productModal = new bootstrap.Modal(document.getElementById('productModal'));
+    productModal.show();
+
+    const res = await fetch(`/product/${productId}/data`);
+    const d = await res.json();
+
+    document.getElementById('pm-name').textContent = d.name;
+    document.getElementById('pm-qty').textContent = d.quantity;
+    document.getElementById('pm-price').textContent = d.price + ' ₽';
+    document.getElementById('pm-desc').textContent = d.description || '';
+
+    if (d.image_url) {
+        const img = document.getElementById('pm-img');
+        img.src = d.image_url;
+        img.alt = d.name;
+        img.style.display = 'block';
+    } else {
+        document.getElementById('pm-no-img').style.display = 'block';
+    }
+
+    // Рейтинг
+    if (d.avg) {
+        let stars = '';
+        for (let i = 1; i <= 5; i++) stars += `<i class="bi bi-star${i <= Math.floor(d.avg) ? '-fill' : ''} text-warning"></i>`;
+        document.getElementById('pm-stars').innerHTML = stars + ` <span class="text-muted small ms-1">${d.avg} / 5 (${d.reviews.length} отзывов)</span>`;
+    } else {
+        document.getElementById('pm-stars').innerHTML = '<span class="text-muted small">Нет оценок</span>';
+    }
+
+    // Кнопки действий
+    let actions = '';
+    if (isAuth) {
+        actions += `<form method="post" action="/cart/add/${productId}" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="${getCsrf()}">
+            <button type="submit" class="btn btn-dark"><i class="bi bi-cart-plus"></i> В корзину</button>
+        </form>`;
+        if (d.is_staff) {
+            actions += ` <a href="/product/edit/${productId}" class="btn btn-outline-secondary"><i class="bi bi-pencil"></i> Редактировать</a>`;
+        }
+    } else {
+        actions = `<a href="/login" class="btn btn-dark">Войдите чтобы купить</a>`;
+    }
+    document.getElementById('pm-actions').innerHTML = actions;
+
+    renderReviews(d.reviews, d.user_reviewed);
+}
+
+function renderReviews(reviews, userReviewed) {
+    const list = document.getElementById('pm-reviews-list');
+    list.innerHTML = '';
+
+    if (!reviews.length) {
+        list.innerHTML = '<div class="text-muted small">Отзывов пока нет. Будьте первым!</div>';
+    } else {
+        reviews.forEach(r => {
+            const isMe = r.user_id === currentUserId;
+            let stars = '';
+            for (let i = 1; i <= 5; i++) stars += `<i class="bi bi-star${i <= r.rating ? '-fill' : ''} text-warning small"></i>`;
+            const card = document.createElement('div');
+            card.className = 'card shadow-sm';
+            card.innerHTML = `
+                <div class="card-body py-2 px-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <strong class="small">${isMe ? 'Вы' : r.user_name}</strong>
+                        <span class="text-muted" style="font-size:0.75rem;">${r.date}</span>
+                    </div>
+                    <div class="mb-1">${stars}</div>
+                    ${r.text ? `<p class="mb-0 small">${r.text}</p>` : ''}
+                    ${isMe ? `<form method="post" action="/product/${currentProductId}/review/delete" class="mt-1">
+                        <input type="hidden" name="csrf_token" value="${getCsrf()}">
+                        <button class="btn btn-link btn-sm text-danger p-0" style="font-size:0.75rem;">Удалить отзыв</button>
+                    </form>` : ''}
+                </div>`;
+            list.appendChild(card);
+        });
+    }
+
+    // Форма отзыва
+    const formBlock = document.getElementById('pm-review-form');
+    if (!isAuth) {
+        formBlock.innerHTML = `<div class="text-muted small"><a href="/login">Войдите</a>, чтобы оставить отзыв</div>`;
+    } else if (userReviewed) {
+        formBlock.innerHTML = '';
+    } else {
+        formBlock.innerHTML = `
+            <div class="border-top pt-3 mt-1">
+                <div class="d-flex gap-1 mb-2" id="pm-star-row">
+                    ${[1,2,3,4,5].map(i => `<i class="bi bi-star fs-4 text-warning pm-star" data-val="${i}" style="cursor:pointer;"></i>`).join('')}
+                </div>
+                <div class="d-flex gap-2">
+                    <textarea id="pm-review-text" class="form-control" rows="2" placeholder="Напишите отзыв..."></textarea>
+                    <button class="btn btn-dark px-3" onclick="submitReview()"><i class="bi bi-send"></i></button>
+                </div>
+                <div id="pm-review-error" class="text-danger small mt-1"></div>
+            </div>`;
+        document.querySelectorAll('.pm-star').forEach(star => {
+            star.addEventListener('click', () => {
+                selectedRating = +star.dataset.val;
+                document.querySelectorAll('.pm-star').forEach((s, i) => {
+                    s.classList.toggle('bi-star-fill', i < selectedRating);
+                    s.classList.toggle('bi-star', i >= selectedRating);
+                });
+            });
+            star.addEventListener('mouseover', () => {
+                const val = +star.dataset.val;
+                document.querySelectorAll('.pm-star').forEach((s, i) => {
+                    s.classList.toggle('bi-star-fill', i < val);
+                    s.classList.toggle('bi-star', i >= val);
+                });
+            });
+            star.addEventListener('mouseout', () => {
+                document.querySelectorAll('.pm-star').forEach((s, i) => {
+                    s.classList.toggle('bi-star-fill', i < selectedRating);
+                    s.classList.toggle('bi-star', i >= selectedRating);
+                });
+            });
+        });
+    }
+}
+
+async function submitReview() {
+    const err = document.getElementById('pm-review-error');
+    if (!selectedRating) { err.textContent = 'Выберите оценку'; return; }
+    const text = document.getElementById('pm-review-text').value.trim();
+    const form = new FormData();
+    form.append('rating', selectedRating);
+    form.append('text', text);
+    form.append('csrf_token', getCsrf());
+    const res = await fetch(`/product/${currentProductId}/review`, {method: 'POST', body: form});
+    if (res.ok || res.redirected) {
+        // перезагружаем данные
+        const d = await fetch(`/product/${currentProductId}/data`).then(r => r.json());
+        renderReviews(d.reviews, d.user_reviewed);
+        selectedRating = 0;
+    }
+}
+
+// Избранное
 {% if current_user.is_authenticated and current_user.role == 'user' %}
 fetch('/wishlist/ids').then(r => r.json()).then(data => {
     data.ids.forEach(id => {
@@ -240,28 +329,5 @@ async function toggleWish(productId, btn) {
         icon.classList.replace('bi-heart-fill', 'bi-heart');
     }
 }
-
-document.querySelectorAll('.star-pick').forEach(star => {
-    star.addEventListener('click', () => {
-        selectedRating = +star.dataset.val;
-        document.querySelectorAll('.star-pick').forEach((s, i) => {
-            s.classList.toggle('bi-star-fill', i < selectedRating);
-            s.classList.toggle('bi-star', i >= selectedRating);
-        });
-    });
-    star.addEventListener('mouseover', () => {
-        const val = +star.dataset.val;
-        document.querySelectorAll('.star-pick').forEach((s, i) => {
-            s.classList.toggle('bi-star-fill', i < val);
-            s.classList.toggle('bi-star', i >= val);
-        });
-    });
-    star.addEventListener('mouseout', () => {
-        document.querySelectorAll('.star-pick').forEach((s, i) => {
-            s.classList.toggle('bi-star-fill', i < selectedRating);
-            s.classList.toggle('bi-star', i >= selectedRating);
-        });
-    });
-});
 </script>
 {% endblock %}
