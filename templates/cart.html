@@ -25,8 +25,16 @@
                     </a>
                 </td>
                 <td>{{ item.product.price }} ₽</td>
-                <td>{{ item.qty }}</td>
-                <td class="fw-bold">{{ item.subtotal }} ₽</td>
+                <td>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-outline-secondary qty-btn"
+                                data-product-id="{{ item.product.id }}" data-delta="-1">−</button>
+                        <span class="qty-value" data-product-id="{{ item.product.id }}">{{ item.qty }}</span>
+                        <button class="btn btn-sm btn-outline-secondary qty-btn"
+                                data-product-id="{{ item.product.id }}" data-delta="1">+</button>
+                    </div>
+                </td>
+                <td class="fw-bold subtotal-value" data-product-id="{{ item.product.id }}">{{ item.subtotal }} ₽</td>
                 <td>
                     <form method="post" action="{{ url_for('cart_remove', product_id=item.product.id) }}">
                         <button type="submit" class="btn btn-sm btn-outline-danger">
@@ -47,7 +55,7 @@
         </button>
     </form>
     <div class="text-end">
-        <p class="fs-5 fw-bold mb-2">Итого: {{ total }} ₽</p>
+        <p class="fs-5 fw-bold mb-2">Итого: <span id="cart-total">{{ total }}</span> ₽</p>
         <a href="{{ url_for('checkout') }}" class="btn btn-dark">
             <i class="bi bi-bag-check"></i> Оформить заказ
         </a>
@@ -61,4 +69,25 @@
     <a href="{{ url_for('catalog') }}" class="btn btn-dark mt-2">Перейти в каталог</a>
 </div>
 {% endif %}
+
+<script>
+const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+document.querySelectorAll('.qty-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const productId = btn.dataset.productId;
+        const delta = parseInt(btn.dataset.delta);
+        const resp = await fetch(`/cart/update/${productId}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+            body: JSON.stringify({delta})
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        document.querySelector(`.qty-value[data-product-id="${productId}"]`).textContent = data.qty;
+        document.querySelector(`.subtotal-value[data-product-id="${productId}"]`).textContent = data.subtotal + ' ₽';
+        document.getElementById('cart-total').textContent = data.total;
+    });
+});
+</script>
 {% endblock %}

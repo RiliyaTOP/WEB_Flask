@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, request, session, flash, abort
+from flask import Flask, render_template, redirect, url_for, request, session, flash, abort, jsonify
 from flask_login import LoginManager, login_user, logout_user, current_user, login_required
 from flask_mail import Mail
 from flask_wtf.csrf import CSRFProtect
@@ -331,6 +331,27 @@ def cart_add(product_id):
         db_sess.commit()
     # возвращаем на ту же страницу откуда добавляли, а не на каталог
     return redirect(request.referrer or url_for('catalog'))
+
+
+@app.route('/cart/update/<int:product_id>', methods=['POST'])
+@login_required
+def cart_update(product_id):
+    data = request.get_json()
+    delta = int(data.get('delta', 0))
+    with session_scope() as db_sess:
+        item = db_sess.query(Cart).filter_by(product_id=product_id, user_id=current_user.id).first()
+        if not item:
+            return jsonify({'error': 'not found'}), 404
+        item.quantity = max(1, item.quantity + delta)
+        db_sess.commit()
+        product = db_sess.get(Products, product_id)
+        qty = item.quantity
+        subtotal = product.price * qty
+        total = sum(
+            db_sess.get(Products, c.product_id).price * c.quantity
+            for c in db_sess.query(Cart).filter_by(user_id=current_user.id).all()
+        )
+    return jsonify({'qty': qty, 'subtotal': subtotal, 'total': total})
 
 
 @app.route('/cart/remove/<int:product_id>', methods=['POST'])
@@ -676,4 +697,4 @@ def not_found(e):
 
 
 if __name__ == '__main__':
-    serve(app, host='127.0.0.1', port=5700)
+    serve(app, host='127.0.0.1', port=3000)
