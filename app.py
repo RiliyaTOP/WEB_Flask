@@ -101,6 +101,7 @@ def inject_cart_count():
 
 # endpoint для отправки OTP-кода на почту покупателя
 @app.route('/auth/request-code', methods=['POST'])
+@csrf.exempt
 def request_code():
     try:
         app.logger.info("OTP request received")
@@ -183,6 +184,7 @@ def request_code():
 
 # проверяем введённый OTP-код и если всё ок — логиним пользователя
 @app.route('/auth/verify', methods=['POST'])
+@csrf.exempt
 def verify():
     email = request.json['email']
     code = request.json['code']
