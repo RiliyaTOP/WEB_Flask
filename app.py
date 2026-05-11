@@ -20,6 +20,8 @@ from contextlib import contextmanager
 from services.otp_service import create_otp, verify_otp
 from services.rate_limit import check_rate, set_rate
 from utils.mail_utils import send_otp_email
+import logging
+import traceback
 import os
 import uuid
 
@@ -56,6 +58,11 @@ app.config.update(
 
 mail = Mail(app)
 csrf = CSRFProtect(app)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(message)s'
+)
 
 
 def save_photo(file):
@@ -96,46 +103,81 @@ def inject_cart_count():
 @app.route('/auth/request-code', methods=['POST'])
 def request_code():
     try:
-        print("REQUEST RECEIVED")
+        app.logger.info("OTP request received")
 
         data = request.get_json()
 
-        print("DATA:", data)
-
-        if not data or 'email' not in data:
-            return {"error": "Email required"}, 400
-
-        email = data['email']
-
-        print("EMAIL:", email)
-
-        # проверка лимита
-        if check_rate(email):
-            print("RATE LIMITED")
+        if not data:
+            app.logger.warning("No JSON data received")
 
             return {
-                "error": "Слишком много попыток"
+                "error": "Пустой запрос"
+            }, 400
+
+        email = data.get('email')
+
+        if not email:
+            app.logger.warning("Email missing in request")
+
+            return {
+                "error": "Email обязателен"
+            }, 400
+
+        app.logger.info(f"OTP requested for: {email}")
+
+        # rate limit
+        if check_rate(email):
+            app.logger.warning(f"Rate limit exceeded: {email}")
+
+            return {
+                "error": "Слишком много попыток. Попробуйте позже."
             }, 429
 
-        code = create_otp(email)
+        # create otp
+        try:
+            code = create_otp(email)
 
-        print("OTP CREATED:", code)
+            app.logger.info(f"OTP created for {email}")
 
-        send_otp_email(mail, email, code)
+        except Exception as e:
+            app.logger.error(f"OTP generation failed for {email}: {str(e)}")
+            traceback.print_exc()
 
-        print("EMAIL SENT")
+            return {
+                "error": "Ошибка генерации OTP"
+            }, 500
 
-        set_rate(email)
+        # send email
+        try:
+            send_otp_email(mail, email, code)
 
-        return {"status": "sent"}
+            app.logger.info(f"OTP email sent to {email}")
+
+        except Exception as e:
+            app.logger.error(f"Email sending failed for {email}: {str(e)}")
+            traceback.print_exc()
+
+            return {
+                "error": "Не удалось отправить email"
+            }, 500
+
+        # set rate limit
+        try:
+            set_rate(email)
+
+        except Exception as e:
+            app.logger.error(f"Rate limit save failed for {email}: {str(e)}")
+
+        return {
+            "status": "sent"
+        }
 
     except Exception as e:
-        import traceback
-
+        app.logger.error(f"Unexpected OTP error: {str(e)}")
         traceback.print_exc()
 
         return {
-            "error": str(e)
+            "error": "Внутренняя ошибка сервера"
         }, 500
 
 
