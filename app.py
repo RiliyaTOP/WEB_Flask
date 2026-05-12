@@ -626,8 +626,8 @@ def account():
 
 
 @app.route('/stores/add', methods=['POST'])
-@login_required
 @csrf.exempt
+@login_required
 def store_add():
     if current_user.role not in ['admin', 'manager', 'warehouse']:
         return jsonify({'error': 'Нет доступа'}), 403
