@@ -652,20 +652,22 @@ def store_add():
 def stores():
     form = StoreForm()
     is_staff = current_user.is_authenticated and current_user.role in ['admin', 'manager', 'warehouse']
-    if form.validate_on_submit():
-        if not is_staff:
-            abort(403)
-        with session_scope() as db_sess:
-            store = Store(
-                name=form.name.data,
-                address=form.address.data,
-                lat=float(form.lat.data),
-                lng=float(form.lng.data),
-            )
-            db_sess.add(store)
-            db_sess.commit()
-            flash(f'Магазин «{store.name}» добавлен.')
-        return redirect(url_for('stores'))
+    if request.method == 'POST' and is_staff:
+        name = request.form.get('name', '').strip()
+        address = request.form.get('address', '').strip()
+        try:
+            lat = float(request.form.get('lat', ''))
+            lng = float(request.form.get('lng', ''))
+        except ValueError:
+            flash('Не удалось определить координаты. Введите адрес точнее.')
+            return redirect(url_for('stores'))
+        if name and address:
+            with session_scope() as db_sess:
+                store = Store(name=name, address=address, lat=lat, lng=lng)
+                db_sess.add(store)
+                db_sess.commit()
+                flash(f'Магазин «{store.name}» добавлен.')
+            return redirect(url_for('stores'))
     with session_scope() as db_sess:
         shops = db_sess.query(Store).all()
         # преобразуем объекты в словари — sqlalchemy объекты нельзя использовать после закрытия сессии

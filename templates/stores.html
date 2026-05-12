@@ -8,7 +8,7 @@
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-dark text-white">Добавить магазин</div>
     <div class="card-body">
-        <form method="post" id="store-form" onsubmit="submitStoreAjax(event); return false;">
+        <form id="store-form" onsubmit="submitStore(event); return false;">
             {{ form.hidden_tag() }}
             {{ form.lat(id="input-lat") }}
             {{ form.lng(id="input-lng") }}
@@ -129,96 +129,79 @@ function geocodePreview(address) {
 }
 
 function removePreview() {
-    if (previewPlacemark) {
-        myMap.geoObjects.remove(previewPlacemark);
-        previewPlacemark = null;
-    }
+    if (previewPlacemark) { myMap.geoObjects.remove(previewPlacemark); previewPlacemark = null; }
     document.getElementById('input-lat').value = '';
     document.getElementById('input-lng').value = '';
     document.getElementById('geocode-status').textContent = '';
 }
 
-async function submitStoreAjax(e) {
+async function submitStore(e) {
+    var status = document.getElementById('geocode-status');
     var lat = document.getElementById('input-lat').value;
     var lng = document.getElementById('input-lng').value;
 
     if (!lat || !lng) {
         var addr = document.getElementById('input-address').value.trim();
-        if (!addr) { document.getElementById('geocode-status').textContent = 'Введите адрес.'; return; }
-        document.getElementById('geocode-status').textContent = 'Определяю координаты...';
-        var res = await ymaps.geocode(addr, {results: 1});
-        var obj = res.geoObjects.get(0);
-        if (!obj) { document.getElementById('geocode-status').textContent = 'Адрес не найден.'; return; }
-        var coords = obj.geometry.getCoordinates();
-        document.getElementById('input-lat').value = coords[0];
-        document.getElementById('input-lng').value = coords[1];
+        if (!addr) { status.textContent = 'Введите адрес.'; return; }
+        status.textContent = 'Определяю координаты...';
+        var geo = await ymaps.geocode(addr, {results: 1});
+        var obj = geo.geoObjects.get(0);
+        if (!obj) { status.textContent = 'Адрес не найден.'; return; }
+        var c = obj.geometry.getCoordinates();
+        document.getElementById('input-lat').value = c[0];
+        document.getElementById('input-lng').value = c[1];
+        lat = c[0]; lng = c[1];
     }
 
-    var form = document.getElementById('store-form');
-    var btn = document.getElementById('btn-submit');
-    btn.disabled = true;
-    document.getElementById('geocode-status').textContent = 'Сохраняю...';
+    var name = document.getElementById('store-form').querySelector('[name=name]').value.trim();
+    var address = document.getElementById('input-address').value.trim();
+    if (!name || !address) { status.textContent = 'Заполните название и адрес.'; return; }
 
-    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
-    try {
-        var response = await fetch('/stores/add', {
-            method: 'POST',
-            body: new FormData(form)
-        });
-        var text = await response.text();
-        var data;
-        try { data = JSON.parse(text); } catch(e) {
-            document.getElementById('geocode-status').textContent = 'Ошибка сервера (' + response.status + ')';
-            console.error('Server response:', text);
-            return;
-        }
-        if (!response.ok) {
-            document.getElementById('geocode-status').textContent = data.error || 'Ошибка ' + response.status;
-            return;
-        }
-        var shop = data;
+    status.textContent = 'Сохраняю...';
+    document.getElementById('btn-submit').disabled = true;
 
-        // добавляем карточку в список
-        var idx = shops.length;
-        shops.push(shop);
-        addShopCard(shop, idx);
-        var noShops = document.querySelector('#shops-list p.text-muted');
-        if (noShops) noShops.remove();
+    var body = new URLSearchParams({ name: name, address: address, lat: lat, lng: lng });
+    var res = await fetch('/stores/add', { method: 'POST', body: body,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
 
-        // превращаем превью-метку в постоянную
-        if (previewPlacemark) {
-            myMap.geoObjects.remove(previewPlacemark);
-            previewPlacemark = null;
-        }
-        addPlacemark(shop, idx);
-        myMap.setCenter([shop.lat, shop.lng], 14, { duration: 300 });
+    document.getElementById('btn-submit').disabled = false;
 
-        form.reset();
-        document.getElementById('input-lat').value = '';
-        document.getElementById('input-lng').value = '';
-        document.getElementById('geocode-status').textContent = 'Магазин добавлен!';
-        setTimeout(function() { document.getElementById('geocode-status').textContent = ''; }, 2000);
-    } catch (err) {
-        document.getElementById('geocode-status').textContent = 'Ошибка соединения.';
-    } finally {
-        btn.disabled = false;
+    if (!res.ok) {
+        var err = await res.json().catch(function() { return {}; });
+        status.textContent = err.error || ('Ошибка ' + res.status);
+        return;
     }
-}
 
-function addShopCard(shop, idx) {
+    var shop = await res.json();
+    var idx = shops.length;
+    shops.push(shop);
+
+    // убираем превью, ставим постоянную метку
+    if (previewPlacemark) { myMap.geoObjects.remove(previewPlacemark); previewPlacemark = null; }
+    addPlacemark(shop, idx);
+
+    // добавляем карточку
+    var noMsg = document.querySelector('#shops-list p.text-muted');
+    if (noMsg) noMsg.remove();
     var csrfToken = document.querySelector('meta[name="csrf-token"]').content;
     var col = document.createElement('div');
     col.className = 'col-md-4';
-    col.innerHTML =
-        '<div class="card shadow-sm h-100" id="card-' + idx + '" style="cursor:pointer" onclick="showShop(' + idx + ')">' +
-        '<div class="card-body">' +
-        '<h5 class="card-title"><i class="bi bi-shop text-dark"></i> ' + shop.name + '</h5>' +
-        '<p class="text-muted mb-0"><i class="bi bi-geo-alt"></i> ' + shop.address + '</p>' +
-        (isStaff ? '<form method="post" action="/stores/delete/' + shop.id + '" onsubmit="return confirm(\'Удалить магазин?\')" onclick="event.stopPropagation()">' +
-            '<input type="hidden" name="csrf_token" value="' + csrfToken + '">' +
-            '<button class="btn btn-sm btn-outline-danger mt-2"><i class="bi bi-trash"></i> Удалить</button></form>' : '') +
-        '</div></div>';
+    col.innerHTML = '<div class="card shadow-sm h-100" id="card-' + idx + '" style="cursor:pointer" onclick="showShop(' + idx + ')">'
+        + '<div class="card-body">'
+        + '<h5 class="card-title"><i class="bi bi-shop text-dark"></i> ' + shop.name + '</h5>'
+        + '<p class="text-muted mb-0"><i class="bi bi-geo-alt"></i> ' + shop.address + '</p>'
+        + (isStaff ? '<form method="post" action="/stores/delete/' + shop.id + '" onsubmit="return confirm(\'Удалить?\''
+            + ')" onclick="event.stopPropagation()"><input type="hidden" name="csrf_token" value="' + csrfToken
+            + '"><button class="btn btn-sm btn-outline-danger mt-2"><i class="bi bi-trash"></i> Удалить</button></form>' : '')
+        + '</div></div>';
     document.getElementById('shops-list').appendChild(col);
+
+    document.getElementById('store-form').reset();
+    document.getElementById('input-lat').value = '';
+    document.getElementById('input-lng').value = '';
+    status.textContent = 'Магазин добавлен!';
+    setTimeout(function() { status.textContent = ''; }, 2000);
+    myMap.setCenter([shop.lat, shop.lng], 14, { duration: 300 });
 }
 
 function addPlacemark(shop, i) {

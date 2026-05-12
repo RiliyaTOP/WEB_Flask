@@ -6,6 +6,6 @@ from wtforms.validators import DataRequired
 class StoreForm(FlaskForm):
     name = StringField('Название магазина', validators=[DataRequired()])
     address = StringField('Улица и дом', validators=[DataRequired()])
-    lat = HiddenField(validators=[DataRequired()])
-    lng = HiddenField(validators=[DataRequired()])
+    lat = HiddenField()
+    lng = HiddenField()
     submit = SubmitField('Добавить магазин')
