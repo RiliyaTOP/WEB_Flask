@@ -80,6 +80,8 @@ var shops = [
 var isStaff = {{ 'true' if is_staff else 'false' }};
 var myMap;
 var placemarks = [];
+var previewPlacemark = null;
+var geocodeTimer = null;
 
 ymaps.ready(init);
 
@@ -94,6 +96,48 @@ function init() {
         addPlacemark(shop, i);
     });
 
+    if (isStaff) {
+        var addrInput = document.getElementById('input-address');
+        if (addrInput) {
+            addrInput.addEventListener('input', function() {
+                clearTimeout(geocodeTimer);
+                var val = this.value.trim();
+                if (!val) { removePreview(); return; }
+                geocodeTimer = setTimeout(function() { geocodePreview(val); }, 600);
+            });
+        }
+    }
+}
+
+function geocodePreview(address) {
+    ymaps.geocode(address, {results: 1}).then(function(res) {
+        var obj = res.geoObjects.get(0);
+        if (!obj) { removePreview(); return; }
+        var coords = obj.geometry.getCoordinates();
+        document.getElementById('input-lat').value = coords[0];
+        document.getElementById('input-lng').value = coords[1];
+        document.getElementById('geocode-status').textContent =
+            'Координаты: ' + coords[0].toFixed(4) + ', ' + coords[1].toFixed(4);
+        if (previewPlacemark) {
+            previewPlacemark.geometry.setCoordinates(coords);
+        } else {
+            previewPlacemark = new ymaps.Placemark(coords, {
+                hintContent: 'Новый магазин'
+            }, { preset: 'islands#redDotIcon' });
+            myMap.geoObjects.add(previewPlacemark);
+        }
+        myMap.setCenter(coords, 14, { duration: 400 });
+    });
+}
+
+function removePreview() {
+    if (previewPlacemark) {
+        myMap.geoObjects.remove(previewPlacemark);
+        previewPlacemark = null;
+    }
+    document.getElementById('input-lat').value = '';
+    document.getElementById('input-lng').value = '';
+    document.getElementById('geocode-status').textContent = '';
 }
 
 function beforeSubmit(e) {
