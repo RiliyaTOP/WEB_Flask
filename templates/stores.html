@@ -210,9 +210,10 @@ function addPlacemark(shop, i) {
         {
             balloonContentHeader: shop.name,
             balloonContentBody: shop.address,
-            hintContent: shop.name
+            hintContent: shop.name,
+            iconCaption: shop.name
         },
-        { preset: 'islands#darkBlueDotIconWithCaption' }
+        { preset: 'islands#redDotIconWithCaption' }
     );
 
     placemark.events.add('click', function() {
