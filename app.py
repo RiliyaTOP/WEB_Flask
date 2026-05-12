@@ -629,8 +629,25 @@ def account():
 def stores():
     form = StoreForm()
     is_staff = current_user.is_authenticated and current_user.role in ['admin', 'manager', 'warehouse']
+    if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        if not is_staff:
+            return jsonify({'error': 'Нет доступа'}), 403
+        try:
+            lat = float(request.form['lat'])
+            lng = float(request.form['lng'])
+        except (KeyError, ValueError):
+            return jsonify({'error': 'Координаты не определены'}), 400
+        name = request.form.get('name', '').strip()
+        address = request.form.get('address', '').strip()
+        if not name or not address:
+            return jsonify({'error': 'Заполните название и адрес'}), 400
+        with session_scope() as db_sess:
+            store = Store(name=name, address=address, lat=lat, lng=lng)
+            db_sess.add(store)
+            db_sess.commit()
+            return jsonify({'id': store.id, 'name': store.name,
+                            'address': store.address, 'lat': store.lat, 'lng': store.lng})
     if form.validate_on_submit():
-        # дополнительная проверка на случай если кто-то отправит запрос напрямую
         if not is_staff:
             abort(403)
         with session_scope() as db_sess:
@@ -642,9 +659,6 @@ def stores():
             )
             db_sess.add(store)
             db_sess.commit()
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return jsonify({'id': store.id, 'name': store.name,
-                                'address': store.address, 'lat': store.lat, 'lng': store.lng})
             flash(f'Магазин «{store.name}» добавлен.')
         return redirect(url_for('stores'))
     with session_scope() as db_sess:

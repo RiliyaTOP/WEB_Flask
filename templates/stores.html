@@ -159,18 +159,28 @@ async function submitStoreAjax(e) {
     btn.disabled = true;
     document.getElementById('geocode-status').textContent = 'Сохраняю...';
 
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
     try {
         var response = await fetch('/stores', {
             method: 'POST',
             body: new FormData(form),
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': csrfMeta ? csrfMeta.content : ''
+            }
         });
-        if (!response.ok) {
-            var err = await response.json();
-            document.getElementById('geocode-status').textContent = err.error || 'Ошибка сервера';
+        var text = await response.text();
+        var data;
+        try { data = JSON.parse(text); } catch(e) {
+            document.getElementById('geocode-status').textContent = 'Ошибка сервера (' + response.status + ')';
+            console.error('Server response:', text);
             return;
         }
-        var shop = await response.json();
+        if (!response.ok) {
+            document.getElementById('geocode-status').textContent = data.error || 'Ошибка ' + response.status;
+            return;
+        }
+        var shop = data;
 
         // добавляем карточку в список
         var idx = shops.length;
