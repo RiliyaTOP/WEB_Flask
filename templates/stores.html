@@ -8,7 +8,7 @@
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-dark text-white">Добавить магазин</div>
     <div class="card-body">
-        <form method="post" id="store-form" onsubmit="return beforeSubmit(event)">
+        <form method="post" id="store-form" onsubmit="submitStoreAjax(event); return false;">
             {{ form.hidden_tag() }}
             {{ form.lat(id="input-lat") }}
             {{ form.lng(id="input-lng") }}
@@ -92,9 +92,7 @@ function init() {
         controls: ['zoomControl', 'fullscreenControl']
     });
 
-    shops.forEach(function(shop, i) {
-        addPlacemark(shop, i);
-    });
+    shops.forEach(function(shop, i) { addPlacemark(shop, i); });
 
     if (isStaff) {
         var addrInput = document.getElementById('input-address');
@@ -103,7 +101,7 @@ function init() {
                 clearTimeout(geocodeTimer);
                 var val = this.value.trim();
                 if (!val) { removePreview(); return; }
-                geocodeTimer = setTimeout(function() { geocodePreview(val); }, 600);
+                geocodeTimer = setTimeout(function() { geocodePreview(val); }, 200);
             });
         }
     }
@@ -126,7 +124,7 @@ function geocodePreview(address) {
             }, { preset: 'islands#redDotIcon' });
             myMap.geoObjects.add(previewPlacemark);
         }
-        myMap.setCenter(coords, 14, { duration: 400 });
+        myMap.setCenter(coords, 14, { duration: 300 });
     });
 }
 
@@ -140,32 +138,81 @@ function removePreview() {
     document.getElementById('geocode-status').textContent = '';
 }
 
-function beforeSubmit(e) {
+async function submitStoreAjax(e) {
     var lat = document.getElementById('input-lat').value;
     var lng = document.getElementById('input-lng').value;
+
     if (!lat || !lng) {
-        e.preventDefault();
-        var address = document.getElementById('input-address').value;
-        if (!address) {
-            document.getElementById('geocode-status').textContent = 'Введите адрес.';
-            return false;
-        }
+        var addr = document.getElementById('input-address').value.trim();
+        if (!addr) { document.getElementById('geocode-status').textContent = 'Введите адрес.'; return; }
         document.getElementById('geocode-status').textContent = 'Определяю координаты...';
-        ymaps.geocode(address, {results: 1}).then(function(res) {
-            var obj = res.geoObjects.get(0);
-            if (!obj) {
-                document.getElementById('geocode-status').textContent = 'Адрес не найден. Уточните адрес.';
-                return;
-            }
-            var coords = obj.geometry.getCoordinates();
-            document.getElementById('input-lat').value = coords[0];
-            document.getElementById('input-lng').value = coords[1];
-            document.getElementById('geocode-status').textContent = 'Координаты найдены: ' + coords[0].toFixed(4) + ', ' + coords[1].toFixed(4);
-            document.getElementById('store-form').submit();
-        });
-        return false;
+        var res = await ymaps.geocode(addr, {results: 1});
+        var obj = res.geoObjects.get(0);
+        if (!obj) { document.getElementById('geocode-status').textContent = 'Адрес не найден.'; return; }
+        var coords = obj.geometry.getCoordinates();
+        document.getElementById('input-lat').value = coords[0];
+        document.getElementById('input-lng').value = coords[1];
     }
-    return true;
+
+    var form = document.getElementById('store-form');
+    var btn = document.getElementById('btn-submit');
+    btn.disabled = true;
+    document.getElementById('geocode-status').textContent = 'Сохраняю...';
+
+    try {
+        var response = await fetch('/stores', {
+            method: 'POST',
+            body: new FormData(form),
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        if (!response.ok) {
+            var err = await response.json();
+            document.getElementById('geocode-status').textContent = err.error || 'Ошибка сервера';
+            return;
+        }
+        var shop = await response.json();
+
+        // добавляем карточку в список
+        var idx = shops.length;
+        shops.push(shop);
+        addShopCard(shop, idx);
+        var noShops = document.querySelector('#shops-list p.text-muted');
+        if (noShops) noShops.remove();
+
+        // превращаем превью-метку в постоянную
+        if (previewPlacemark) {
+            myMap.geoObjects.remove(previewPlacemark);
+            previewPlacemark = null;
+        }
+        addPlacemark(shop, idx);
+        myMap.setCenter([shop.lat, shop.lng], 14, { duration: 300 });
+
+        form.reset();
+        document.getElementById('input-lat').value = '';
+        document.getElementById('input-lng').value = '';
+        document.getElementById('geocode-status').textContent = 'Магазин добавлен!';
+        setTimeout(function() { document.getElementById('geocode-status').textContent = ''; }, 2000);
+    } catch (err) {
+        document.getElementById('geocode-status').textContent = 'Ошибка соединения.';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function addShopCard(shop, idx) {
+    var csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+    var col = document.createElement('div');
+    col.className = 'col-md-4';
+    col.innerHTML =
+        '<div class="card shadow-sm h-100" id="card-' + idx + '" style="cursor:pointer" onclick="showShop(' + idx + ')">' +
+        '<div class="card-body">' +
+        '<h5 class="card-title"><i class="bi bi-shop text-dark"></i> ' + shop.name + '</h5>' +
+        '<p class="text-muted mb-0"><i class="bi bi-geo-alt"></i> ' + shop.address + '</p>' +
+        (isStaff ? '<form method="post" action="/stores/delete/' + shop.id + '" onsubmit="return confirm(\'Удалить магазин?\')" onclick="event.stopPropagation()">' +
+            '<input type="hidden" name="csrf_token" value="' + csrfToken + '">' +
+            '<button class="btn btn-sm btn-outline-danger mt-2"><i class="bi bi-trash"></i> Удалить</button></form>' : '') +
+        '</div></div>';
+    document.getElementById('shops-list').appendChild(col);
 }
 
 function addPlacemark(shop, i) {

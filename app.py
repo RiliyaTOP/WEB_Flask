@@ -39,7 +39,6 @@ def session_scope():
 
 app = Flask(__name__)
 app.secret_key = 'dev-secret-key'
-# сессия живёт 7 дней — чтобы пользователь не разлогинивался каждый день
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 # папка для загружаемых фото товаров, путь строим относительно текущего файла
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
@@ -638,12 +637,14 @@ def stores():
             store = Store(
                 name=form.name.data,
                 address=form.address.data,
-                # координаты приходят уже заполненными — их определяет геокодер на фронте
-                lat=form.lat.data,
-                lng=form.lng.data,
+                lat=float(form.lat.data),
+                lng=float(form.lng.data),
             )
             db_sess.add(store)
             db_sess.commit()
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify({'id': store.id, 'name': store.name,
+                                'address': store.address, 'lat': store.lat, 'lng': store.lng})
             flash(f'Магазин «{store.name}» добавлен.')
         return redirect(url_for('stores'))
     with session_scope() as db_sess:
