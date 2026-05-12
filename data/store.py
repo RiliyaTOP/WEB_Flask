@@ -8,5 +8,6 @@ class Store(SqlAlchemyBase):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
     address = Column(String, nullable=False)
+    # координаты нужны для отображения метки на Яндекс Картах
     lat = Column(Float, nullable=False)
     lng = Column(Float, nullable=False)

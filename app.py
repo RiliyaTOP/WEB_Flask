@@ -109,76 +109,51 @@ def request_code():
 
         if not data:
             app.logger.warning("No JSON data received")
-
-            return {
-                "error": "Пустой запрос"
-            }, 400
+            return {"error": "Пустой запрос"}, 400
 
         email = data.get('email')
 
         if not email:
             app.logger.warning("Email missing in request")
-
-            return {
-                "error": "Email обязателен"
-            }, 400
+            return {"error": "Email обязателен"}, 400
 
         app.logger.info(f"OTP requested for: {email}")
 
-        # rate limit
+        # проверяем не слишком ли часто запрашивают код
         if check_rate(email):
             app.logger.warning(f"Rate limit exceeded: {email}")
+            return {"error": "Слишком много попыток. Попробуйте позже."}, 429
 
-            return {
-                "error": "Слишком много попыток. Попробуйте позже."
-            }, 429
-
-        # create otp
+        # создаём код и сохраняем хэш в Redis
         try:
             code = create_otp(email)
-
             app.logger.info(f"OTP created for {email}")
-
         except Exception as e:
             app.logger.error(f"OTP generation failed for {email}: {str(e)}")
             traceback.print_exc()
+            return {"error": "Ошибка генерации OTP"}, 500
 
-            return {
-                "error": "Ошибка генерации OTP"
-            }, 500
-
-        # send email
+        # отправляем код на почту
         try:
             send_otp_email(mail, email, code)
-
             app.logger.info(f"OTP email sent to {email}")
-
         except Exception as e:
             app.logger.error(f"Email sending failed for {email}: {str(e)}")
             traceback.print_exc()
+            return {"error": "Не удалось отправить email"}, 500
 
-            return {
-                "error": "Не удалось отправить email"
-            }, 500
-
-        # set rate limit
+        # ставим ограничение только после успешной отправки
         try:
             set_rate(email)
-
         except Exception as e:
             app.logger.error(f"Rate limit save failed for {email}: {str(e)}")
 
-        return {
-            "status": "sent"
-        }
+        return {"status": "sent"}
 
     except Exception as e:
         app.logger.error(f"Unexpected OTP error: {str(e)}")
         traceback.print_exc()
-
-        return {
-            "error": "Внутренняя ошибка сервера"
-        }, 500
+        return {"error": "Внутренняя ошибка сервера"}, 500
 
 
 # проверяем введённый OTP-код и если всё ок — логиним пользователя
@@ -191,28 +166,19 @@ def verify():
     result = verify_otp(email, code)
 
     if result == "expired":
-        return {
-            "error": "Срок действия кода истёк"
-        }, 400
+        return {"error": "Срок действия кода истёк"}, 400
 
     if result == "blocked":
-        return {
-            "error": "Вы превысили количество попыток ввода OTP. Попробуйте позже."
-        }, 429
+        return {"error": "Вы превысили количество попыток ввода OTP. Попробуйте позже."}, 429
 
     if result == "invalid":
-        return {
-            "error": "Неверный OTP-код"
-        }, 400
-
+        return {"error": "Неверный OTP-код"}, 400
 
     with session_scope() as db_sess:
         user = db_sess.query(User).filter(User.email == email).first()
 
         if not user:
-            return {
-                "error": "Пользователь не найден"
-            }, 404
+            return {"error": "Пользователь не найден"}, 404
 
         login_user(user, remember=True)
 
@@ -227,6 +193,7 @@ def index():
 
 @app.route('/catalog')
 def catalog():
+    # получаем параметры фильтрации из строки запроса
     q = request.args.get('q', '').strip()
     selected_category = request.args.get('category', '')
     with session_scope() as db_sess:
@@ -234,6 +201,7 @@ def catalog():
         # фильтруем по поисковому запросу если он есть
         if q:
             query = query.filter(Products.name.ilike(f'%{q}%'))
+        # фильтруем по категории если выбрана
         if selected_category:
             query = query.filter(Products.category == selected_category)
         products = query.all()
@@ -252,6 +220,7 @@ def catalog():
                            categories=CATEGORIES, selected_category=selected_category)
 
 
+# отдаёт данные о товаре в JSON — используется модальным окном в каталоге
 @app.route('/product/<int:product_id>/data')
 def product_data_api(product_id):
     with session_scope() as db_sess:
@@ -350,6 +319,7 @@ def delete_review(product_id):
 @app.route('/cart')
 @login_required
 def cart():
+    # собираем все позиции корзины с подсчётом суммы по каждой
     with session_scope() as db_sess:
         items = db_sess.query(Cart).filter_by(user_id=current_user.id).all()
         result = []
@@ -381,17 +351,20 @@ def cart_add(product_id):
 @app.route('/cart/update/<int:product_id>', methods=['POST'])
 @login_required
 def cart_update(product_id):
+    # принимает delta: +1 или -1, возвращает обновлённые суммы для JS
     data = request.get_json()
     delta = int(data.get('delta', 0))
     with session_scope() as db_sess:
         item = db_sess.query(Cart).filter_by(product_id=product_id, user_id=current_user.id).first()
         if not item:
             return jsonify({'error': 'not found'}), 404
+        # минимум 1 — меньше единицы количество опуститься не может
         item.quantity = max(1, item.quantity + delta)
         db_sess.commit()
         product = db_sess.get(Products, product_id)
         qty = item.quantity
         subtotal = product.price * qty
+        # пересчитываем итог по всей корзине
         total = sum(
             db_sess.get(Products, c.product_id).price * c.quantity
             for c in db_sess.query(Cart).filter_by(user_id=current_user.id).all()
@@ -402,6 +375,7 @@ def cart_update(product_id):
 @app.route('/cart/remove/<int:product_id>', methods=['POST'])
 @login_required
 def cart_remove(product_id):
+    # убираем одну конкретную позицию из корзины
     with session_scope() as db_sess:
         item = db_sess.query(Cart).filter_by(product_id=product_id, user_id=current_user.id).first()
         if item:
@@ -413,6 +387,7 @@ def cart_remove(product_id):
 @app.route('/cart/clear', methods=['POST'])
 @login_required
 def cart_clear():
+    # удаляем все позиции текущего пользователя одним запросом
     with session_scope() as db_sess:
         db_sess.query(Cart).filter_by(user_id=current_user.id).delete()
         db_sess.commit()
@@ -439,6 +414,7 @@ def product_delete(product_id):
 @app.route('/supply', methods=['GET', 'POST'])
 @login_required
 def supply():
+    # страница поиска товара для пополнения склада
     if current_user.role not in ['admin', 'manager', 'warehouse']:
         abort(403)
     form = Supply()
@@ -491,6 +467,7 @@ def product_edit(product_id):
         product = db_sess.get(Products, product_id)
         if product is None:
             return render_template('404.html'), 404
+        # obj=product заполняет поля формы текущими значениями товара
         form = EditProductForm(obj=product)
         if form.validate_on_submit():
             existing = db_sess.query(Products).filter(
@@ -504,6 +481,7 @@ def product_edit(product_id):
             product.category = form.category.data or None
             product.description = form.description.data or None
             if form.photo.data and form.photo.data.filename:
+                # удаляем старое фото перед заменой чтобы не копились мусорные файлы
                 old = db_sess.query(ProductImage).filter_by(product_id=product_id).first()
                 if old:
                     old_path = os.path.join(app.config['UPLOAD_FOLDER'], old.filename)
@@ -629,6 +607,8 @@ def account():
     return render_template('account.html', user=current_user)
 
 
+# AJAX-эндпоинт добавления магазина — обходим CSRF потому что запрос идёт через fetch
+# @csrf.exempt должен быть выше @login_required, иначе атрибут csrf_exempt не видно снаружи
 @app.route('/stores/add', methods=['POST'])
 @csrf.exempt
 @login_required
@@ -648,12 +628,14 @@ def store_add():
         store = Store(name=name, address=address, lat=lat, lng=lng)
         db_sess.add(store)
         db_sess.commit()
+        # возвращаем данные магазина — JS использует их чтобы добавить карточку и метку
         return jsonify({'id': store.id, 'name': store.name,
                         'address': store.address, 'lat': store.lat, 'lng': store.lng})
 
 
 @app.route('/stores', methods=['GET', 'POST'])
 def stores():
+    # страница открыта для всех — и покупатели видят магазины на карте
     form = StoreForm()
     is_staff = current_user.is_authenticated and current_user.role in ['admin', 'manager', 'warehouse']
     if request.method == 'POST' and is_staff:
@@ -696,6 +678,7 @@ def store_delete(store_id):
 @app.route('/wishlist')
 @login_required
 def wishlist():
+    # загружаем все товары из избранного с картинками и рейтингами
     with session_scope() as db_sess:
         items = db_sess.query(Wishlist).filter_by(user_id=current_user.id).all()
         product_ids = [w.product_id for w in items]
@@ -710,6 +693,7 @@ def wishlist():
     return render_template('wishlist.html', products=products, images=images, ratings=ratings)
 
 
+# отдаёт список ID товаров в избранном — нужен при загрузке каталога чтобы подсветить сердечки
 @app.route('/wishlist/ids')
 @login_required
 def wishlist_ids():
@@ -721,6 +705,7 @@ def wishlist_ids():
 @app.route('/wishlist/toggle/<int:product_id>', methods=['POST'])
 @login_required
 def wishlist_toggle(product_id):
+    # если товар уже в избранном — убираем, если нет — добавляем
     with session_scope() as db_sess:
         entry = db_sess.query(Wishlist).filter_by(user_id=current_user.id, product_id=product_id).first()
         if entry:
@@ -735,6 +720,7 @@ def wishlist_toggle(product_id):
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    # дашборд только для персонала, обычные покупатели получат 403
     if current_user.role not in ['admin', 'manager', 'warehouse', 'support', 'courier']:
         abort(403)
     with session_scope() as db_sess:
@@ -742,12 +728,14 @@ def dashboard():
         total_users = db_sess.query(User).filter(User.role == 'user').count()
         total_reviews = db_sess.query(Review).count()
         total_staff = db_sess.query(Employee).count()
+        # товары с остатком меньше 5 — требуют пополнения
         low_stock = db_sess.query(Products).filter(Products.quantity < 5).order_by(Products.quantity).all()
         all_reviews = db_sess.query(Review).all()
         ratings = {}
         for rev in all_reviews:
             ratings.setdefault(rev.product_id, []).append(rev.rating)
         avg_ratings = {pid: round(sum(vals) / len(vals), 1) for pid, vals in ratings.items()}
+        # топ-5 товаров по среднему рейтингу
         top_product_ids = sorted(avg_ratings, key=lambda pid: avg_ratings[pid], reverse=True)[:5]
         top_rated = []
         for pid in top_product_ids:

@@ -1,56 +1,47 @@
+import redis
 import random
 import hashlib
-import redis
 
+# отдельное подключение к Redis для этого сервиса
 r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
+# время жизни кода — 5 минут
 OTP_TTL = 300
+# максимальное количество неверных попыток перед блокировкой
 MAX_ATTEMPTS = 5
-BLOCK_TIME = 300
 
 
-def create_otp(email):
+def create_otp(email: str):
+    # генерируем код и сразу хэшируем его перед сохранением
     code = str(random.randint(100000, 999999))
     hashed = hashlib.sha256(code.encode()).hexdigest()
 
     r.setex(f"otp:{email}", OTP_TTL, hashed)
-
-    r.delete(f"otp_attempts:{email}")
-    r.delete(f"otp_block:{email}")
+    # счётчик попыток обнуляем при каждом новом коде
+    r.set(f"otp_attempts:{email}", 0, ex=OTP_TTL)
 
     return code
 
 
-def is_blocked(email):
-    return r.exists(f"otp_block:{email}")
-
-
-def verify_otp(email, code):
-    if is_blocked(email):
-        return "blocked"
-
+def verify_otp(email: str, code: str):
     saved = r.get(f"otp:{email}")
     if not saved:
+        # ключ в Redis не найден — код истёк или ещё не запрашивался
         return "expired"
 
-    attempts_key = f"otp_attempts:{email}"
-    attempts = r.incr(attempts_key)
-    r.expire(attempts_key, OTP_TTL)
+    attempts = r.get(f"otp_attempts:{email}") or 0
+    attempts = int(attempts)
 
-    if attempts > MAX_ATTEMPTS:
-        r.setex(f"otp_block:{email}", BLOCK_TIME, 1)
+    if attempts >= MAX_ATTEMPTS:
         return "blocked"
 
     if hashlib.sha256(code.encode()).hexdigest() != saved:
+        # увеличиваем счётчик неверных попыток
+        r.set(f"otp_attempts:{email}", attempts + 1, ex=300)
         return "invalid"
 
-    # код верный, убираем всё связанное с этим otp
-    r.delete(f"otp:{email}")
-    r.delete(attempts_key)
-
-    return "ok"
-
-
-def delete_otp(email):
+    # всё верно — удаляем код чтобы нельзя было войти по нему повторно
     r.delete(f"otp:{email}")
     r.delete(f"otp_attempts:{email}")
+
+    return "ok"
