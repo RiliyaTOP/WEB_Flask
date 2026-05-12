@@ -318,7 +318,11 @@ fetch('/wishlist/ids').then(r => r.json()).then(data => {
 {% endif %}
 
 async function toggleWish(productId, btn) {
-    const res = await fetch(`/wishlist/toggle/${productId}`, {method: 'POST'});
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+    const res = await fetch(`/wishlist/toggle/${productId}`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrfToken}
+    });
     const data = await res.json();
     const icon = btn.querySelector('i');
     if (data.in_wishlist) {

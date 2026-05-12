@@ -37,6 +37,7 @@
                 <td class="fw-bold subtotal-value" data-product-id="{{ item.product.id }}">{{ item.subtotal }} ₽</td>
                 <td>
                     <form method="post" action="{{ url_for('cart_remove', product_id=item.product.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn btn-sm btn-outline-danger">
                             <i class="bi bi-trash"></i>
                         </button>
@@ -50,6 +51,7 @@
 
 <div class="d-flex justify-content-between align-items-center mt-3">
     <form method="post" action="{{ url_for('cart_clear') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-outline-secondary">
             <i class="bi bi-x-circle"></i> Очистить корзину
         </button>
