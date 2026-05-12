@@ -625,28 +625,33 @@ def account():
     return render_template('account.html', user=current_user)
 
 
+@app.route('/stores/add', methods=['POST'])
+@login_required
+@csrf.exempt
+def store_add():
+    if current_user.role not in ['admin', 'manager', 'warehouse']:
+        return jsonify({'error': 'Нет доступа'}), 403
+    try:
+        lat = float(request.form['lat'])
+        lng = float(request.form['lng'])
+    except (KeyError, ValueError):
+        return jsonify({'error': 'Координаты не определены'}), 400
+    name = request.form.get('name', '').strip()
+    address = request.form.get('address', '').strip()
+    if not name or not address:
+        return jsonify({'error': 'Заполните название и адрес'}), 400
+    with session_scope() as db_sess:
+        store = Store(name=name, address=address, lat=lat, lng=lng)
+        db_sess.add(store)
+        db_sess.commit()
+        return jsonify({'id': store.id, 'name': store.name,
+                        'address': store.address, 'lat': store.lat, 'lng': store.lng})
+
+
 @app.route('/stores', methods=['GET', 'POST'])
 def stores():
     form = StoreForm()
     is_staff = current_user.is_authenticated and current_user.role in ['admin', 'manager', 'warehouse']
-    if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        if not is_staff:
-            return jsonify({'error': 'Нет доступа'}), 403
-        try:
-            lat = float(request.form['lat'])
-            lng = float(request.form['lng'])
-        except (KeyError, ValueError):
-            return jsonify({'error': 'Координаты не определены'}), 400
-        name = request.form.get('name', '').strip()
-        address = request.form.get('address', '').strip()
-        if not name or not address:
-            return jsonify({'error': 'Заполните название и адрес'}), 400
-        with session_scope() as db_sess:
-            store = Store(name=name, address=address, lat=lat, lng=lng)
-            db_sess.add(store)
-            db_sess.commit()
-            return jsonify({'id': store.id, 'name': store.name,
-                            'address': store.address, 'lat': store.lat, 'lng': store.lng})
     if form.validate_on_submit():
         if not is_staff:
             abort(403)

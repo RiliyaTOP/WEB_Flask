@@ -161,13 +161,9 @@ async function submitStoreAjax(e) {
 
     var csrfMeta = document.querySelector('meta[name="csrf-token"]');
     try {
-        var response = await fetch('/stores', {
+        var response = await fetch('/stores/add', {
             method: 'POST',
-            body: new FormData(form),
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRFToken': csrfMeta ? csrfMeta.content : ''
-            }
+            body: new FormData(form)
         });
         var text = await response.text();
         var data;
