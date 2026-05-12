@@ -31,6 +31,10 @@
                         {% endfor %}
                     </div>
                     <div class="mb-3">
+                        {{ form.category.label(class="form-label") }}
+                        {{ form.category(class="form-select") }}
+                    </div>
+                    <div class="mb-3">
                         {{ form.description.label(class="form-label") }}
                         {{ form.description(class="form-control", rows=4, placeholder="Опишите товар...") }}
                     </div>

@@ -12,4 +12,5 @@ class Products(SqlAlchemyBase, UserMixin):
     price = Column(Integer, nullable=True)
     quantity = Column(Integer, nullable=True)
     description = Column(Text, nullable=True)
+    category = Column(String, nullable=True)
     created_date = Column(DateTime, default=datetime.datetime.now)

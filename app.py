@@ -79,7 +79,7 @@ login_manager.init_app(app)
 # инициализируем бд — создаёт файл и все таблицы если их ещё нет
 db_session.global_init("db/blogs.sqlite")
 
-CATEGORIES = ['Электроника', 'Одежда', 'Книги']
+CATEGORIES = ['Одежда', 'Еда', 'Напитки', 'Электроника', 'Книги', 'Спорт', 'Дом и сад', 'Красота', 'Игрушки']
 
 
 def cart_count():
@@ -234,6 +234,8 @@ def catalog():
         # фильтруем по поисковому запросу если он есть
         if q:
             query = query.filter(Products.name.ilike(f'%{q}%'))
+        if selected_category:
+            query = query.filter(Products.category == selected_category)
         products = query.all()
         # картинки собираем одним запросом заранее, чтобы не делать n запросов на каждый товар
         images = {img.product_id: url_for('static', filename=f'uploads/{img.filename}')
@@ -464,6 +466,7 @@ def add_product():
                 name=form.name.data,
                 price=form.price.data,
                 quantity=form.quantity.data,
+                category=form.category.data or None,
                 description=form.description.data or None
             )
             db_sess.add(product)
@@ -498,6 +501,7 @@ def product_edit(product_id):
             product.name = form.name.data
             product.price = form.price.data
             product.quantity = form.quantity.data
+            product.category = form.category.data or None
             product.description = form.description.data or None
             if form.photo.data and form.photo.data.filename:
                 old = db_sess.query(ProductImage).filter_by(product_id=product_id).first()

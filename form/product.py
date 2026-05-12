@@ -5,10 +5,15 @@ from wtforms import (EmailField, SelectField, PasswordField, StringField, Boolea
 from wtforms.validators import DataRequired, Optional
 
 
+CATEGORIES = ['Одежда', 'Еда', 'Напитки', 'Электроника', 'Книги', 'Спорт', 'Дом и сад', 'Красота', 'Игрушки']
+CATEGORY_CHOICES = [('', 'Без категории')] + [(c, c) for c in CATEGORIES]
+
+
 class NewProductsForm(FlaskForm):
     name = StringField('Название', validators=[DataRequired()])
     price = IntegerField("Цена", validators=[DataRequired()])
     quantity = IntegerField("Количество", validators=[DataRequired()])
+    category = SelectField('Категория', choices=CATEGORY_CHOICES, validators=[Optional()])
     description = TextAreaField('Описание', validators=[Optional()])
     photo = FileField('Фото товара', validators=[FileAllowed(['jpg', 'jpeg', 'png', 'webp'], 'Только изображения')])
 
@@ -19,6 +24,7 @@ class EditProductForm(FlaskForm):
     name = StringField('Название', validators=[DataRequired()])
     price = IntegerField("Цена", validators=[DataRequired()])
     quantity = IntegerField("Количество", validators=[DataRequired()])
+    category = SelectField('Категория', choices=CATEGORY_CHOICES, validators=[Optional()])
     description = TextAreaField('Описание', validators=[Optional()])
     photo = FileField('Новое фото', validators=[FileAllowed(['jpg', 'jpeg', 'png', 'webp'], 'Только изображения')])
 
